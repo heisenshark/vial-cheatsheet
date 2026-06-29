@@ -6,6 +6,15 @@ import { parseKLE, mapLayersToLayout } from './kleParser';
 // ── Themes ──────────────────────────────────────────────────────────────────
 // All text/fill combos target ≥ 4.5:1 contrast (WCAG AA).
 const THEMES = {
+  mono_print: {
+    id: 'mono_print', name: 'Ink-Saver B&W',
+    // White background, white alphas, very light gray modifiers/accents, black outlines
+    bg: '#ffffff',
+    keyAlpha: '#ffffff',    keyAlphaText: '#000000',
+    keyModifier: '#f3f4f6', keyModifierText: '#000000',
+    keyAccent: '#e5e7eb',   keyAccentText: '#000000',
+    boardColor: '#000000',
+  },
   gmk_olivia: {
     id: 'gmk_olivia', name: 'GMK Olivia',
     // Light pinkish alphas on dark bg — high contrast throughout
@@ -90,6 +99,26 @@ function formatLabel(label, mode) {
   return lines.join('\n');
 }
 
+function solveCatmullRom(pts) {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[0];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || pts[i + 1];
+    
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CheatsheetMaker() {
   // Layout data
@@ -114,6 +143,22 @@ export default function CheatsheetMaker() {
   const [fontSize, setFontSize]     = useState(12);
   const [fontFamily, setFontFamily] = useState('Inter');
   const [labelMode, setLabelMode]   = useState('default'); // 'default' | 'abbrev' | 'emoji'
+
+  // Print layout — free-form canvas
+  const [printMode, setPrintMode]     = useState(false);
+  const [printOrientation, setPrintOrientation] = useState('landscape');
+  const [printZoom, setPrintZoom]               = useState(1);
+  const [layerPositions, setLayerPos] = useState({});   // {idx: {x,y}}
+  const [arrowMidpoints, setArrowMidpoints] = useState({}); // {arrowId: [{x,y}, {x,y}, {x,y}]}
+  const [hiddenLayers, setHiddenLayers]     = useState({});   // {layerIdx: boolean}
+  const [viewOff, setViewOff]         = useState({ x: -40, y: -40 });
+  const [svgDrag, setSvgDrag]         = useState(null); // null | {type,layerIdx?,sx,sy,ox,oy}
+  const [snapGuides, setSnapGuides]             = useState([]);
+  const [disableArrows, setDisableArrows]       = useState(false);
+  const [colorLayerButtons, setColorLayerButtons] = useState(true);
+  const svgRef  = useRef(null);
+  const dragCTM = useRef(null); // frozen CTM at drag-start to avoid feedback
+  const arrowsRef = useRef([]);
 
   // UI
   const [isDragging, setIsDragging] = useState(false);
@@ -175,6 +220,7 @@ export default function CheatsheetMaker() {
       setMappedLayers(mapped);
       setFileName(name);
       setActiveLayer(null);
+      setPrintMode(false);
 
       // ── Parse combos ──
       if (data.combo) {
@@ -225,7 +271,19 @@ export default function CheatsheetMaker() {
     const code = key.keycode ?? '';
     if (code === '__PHANTOM__') return { invisible: true };
 
+    const toLayer = getTargetLayer(code);
     const { type } = translateKeycode(code);
+
+    if (colorLayerButtons && toLayer !== null) {
+      const color = ARROW_COLORS[toLayer % 8];
+      const isNested = (type === 'layertap' || type === 'modtap');
+      return {
+        fill: color,
+        text: '#121212',
+        nested: isNested
+      };
+    }
+
     switch (type) {
       case 'modifier': return { fill: theme.keyModifier, text: theme.keyModifierText };
       case 'layer':
@@ -236,7 +294,7 @@ export default function CheatsheetMaker() {
       // Esc, Space, Enter, Tab → accent so they stand out from plain alphas
       case 'special':  return { fill: theme.keyAccent,   text: theme.keyAccentText };
       case 'trans':    return { fill: theme.bg, text: theme.keyAlphaText, dashed: true };
-      case 'empty':    return { fill: 'transparent', text: 'transparent', ghost: true };
+      case 'empty':    return { fill: theme.bg, text: theme.keyAlphaText, dashed: true };
       default:         return { fill: theme.keyAlpha,    text: theme.keyAlphaText };
     }
   };
@@ -251,7 +309,10 @@ export default function CheatsheetMaker() {
         {/* Board bezel */}
         <rect x={pad * unitSize - 10} y={pad * unitSize - 10}
           width={w - pad * 2 * unitSize + 20} height={h - pad * 2 * unitSize + 20}
-          fill={theme.boardColor} rx={radius + 6} ry={radius + 6} />
+          fill={theme.id === 'mono_print' ? '#ffffff' : theme.boardColor}
+          stroke={theme.id === 'mono_print' ? '#000000' : 'none'}
+          strokeWidth={theme.id === 'mono_print' ? 1.5 : 0}
+          rx={radius + 6} ry={radius + 6} />
 
         {keys.map((key, i) => {
           const style = keyStyle(key);
@@ -291,8 +352,10 @@ export default function CheatsheetMaker() {
             return (
               <g key={i} transform={transform}>
                 {/* Outer shadow */}
-                <rect x={bx} y={by + 2} width={bw} height={bh}
-                  fill="rgba(0,0,0,0.18)" rx={radius} ry={radius} />
+                {theme.id !== 'mono_print' && (
+                  <rect x={bx} y={by + 2} width={bw} height={bh}
+                    fill="rgba(0,0,0,0.18)" rx={radius} ry={radius} />
+                )}
                 {/* Outer body (hold action color) */}
                 <rect x={bx} y={by} width={bw} height={bh}
                   fill={style.fill} stroke={theme.boardColor} strokeWidth={1.5}
@@ -303,17 +366,21 @@ export default function CheatsheetMaker() {
                   fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
                 >{holdLabel}</text>
                 {/* Inner key shadow */}
-                <rect x={ix} y={iy + 1} width={innerW} height={innerH}
-                  fill="rgba(0,0,0,0.2)" rx={innerR} ry={innerR} />
+                {theme.id !== 'mono_print' && (
+                  <rect x={ix} y={iy + 1} width={innerW} height={innerH}
+                    fill="rgba(0,0,0,0.2)" rx={innerR} ry={innerR} />
+                )}
                 {/* Inner key body (alpha color = tap action) */}
                 <rect x={ix} y={iy} width={innerW} height={innerH}
                   fill={theme.keyAlpha} stroke={theme.boardColor} strokeWidth={1}
                   rx={innerR} ry={innerR} />
                 {/* Inner key highlight edge */}
-                <rect x={ix + 2} y={iy + 1} width={innerW - 4} height={innerH - 3}
-                  fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth={1}
-                  rx={Math.max(0, innerR - 2)} ry={Math.max(0, innerR - 2)}
-                  pointerEvents="none" />
+                {theme.id !== 'mono_print' && (
+                  <rect x={ix + 2} y={iy + 1} width={innerW - 4} height={innerH - 3}
+                    fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth={1}
+                    rx={Math.max(0, innerR - 2)} ry={Math.max(0, innerR - 2)}
+                    pointerEvents="none" />
+                )}
                 {/* Tap legend */}
                 <text x={ix + innerW / 2} y={iy + innerH / 2 + fontSize * 0.35}
                   textAnchor="middle" fontSize={fontSize} fill={theme.keyAlphaText}
@@ -326,7 +393,7 @@ export default function CheatsheetMaker() {
           // ── Standard key ─────────────────────────────────────────────────
           return (
             <g key={i} transform={transform}>
-              {!style.ghost && (
+              {!style.ghost && theme.id !== 'mono_print' && (
                 <rect x={bx} y={by + 2} width={bw} height={bh}
                   fill="rgba(0,0,0,0.15)" rx={radius} ry={radius} />
               )}
@@ -340,7 +407,7 @@ export default function CheatsheetMaker() {
                 strokeWidth={1.5}
                 strokeDasharray={style.dashed ? '4 3' : undefined}
                 rx={radius} ry={radius} />
-              {!style.dashed && !style.ghost && (
+              {!style.dashed && !style.ghost && theme.id !== 'mono_print' && (
                 <rect x={bx + 2} y={by + 1} width={bw - 4} height={bh - 3}
                   fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={1}
                   rx={Math.max(0, radius - 2)} ry={Math.max(0, radius - 2)}
@@ -368,11 +435,520 @@ export default function CheatsheetMaker() {
   const downloadSVG = (layerIdx) => {
     const el = document.getElementById(`layer-svg-${layerIdx}`);
     if (!el) return;
-    const src = '<?xml version="1.0" standalone="no"?>\n' + new XMLSerializer().serializeToString(el);
+    const src = '<?xml version="1.0" standalone="no">\n' + new XMLSerializer().serializeToString(el);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
     a.download = `layer_${layerIdx}.svg`;
     a.click();
+  };
+
+  // ── Layer target helper ────────────────────────────────────────────────────
+  function getTargetLayer(code) {
+    if (!code || typeof code !== 'string') return null;
+    const m = code.match(/(?:MO|TO|TG|TT|DF|OSL|LT|LT\d*)\(?(\d+)/);
+    if (!m) return null;
+    const n = parseInt(m[1]);
+    return n < mappedLayers.length ? n : null;
+  }
+
+  // ── Interactive canvas ─────────────────────────────────────────────────────
+  const ARROW_COLORS = ['#a7c080','#83c092','#7fbbb3','#d699b6','#dbbc7f','#e69875','#e67e80','#9da9a0'];
+  const CPU = unitSize;
+  const CPG = keyGap;
+  const CPR = radius;
+  const CPF = fontSize;
+  const CPAD = 0.5;
+  const CLABEL = Math.max(28, fontSize + 12);
+
+  // Initialise positions in a 2-col grid whenever layers are loaded
+  useEffect(() => {
+    if (!parsedKeys.length || !mappedLayers.length) return;
+    const mx = Math.max(...parsedKeys.map(k=>k.x+k.w));
+    const my = Math.max(...parsedKeys.map(k=>k.y+k.h));
+    const cw = (mx+CPAD*2)*CPU + 80;
+    const ch = (my+CPAD*2)*CPU + CLABEL + 60;
+    const pos = {};
+    mappedLayers.forEach((_,i) => {
+      pos[i] = { x: (i%2)*cw + 20, y: Math.floor(i/2)*ch + 20 };
+    });
+    setLayerPos(pos);
+    setViewOff({ x:-40, y:-40 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mappedLayers.length, parsedKeys.length]);
+
+  const fitVisibleToPage = () => {
+    if (!parsedKeys.length || !mappedLayers.length) return;
+    const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
+    const my = Math.max(...parsedKeys.map(k => k.y + k.h));
+    const kbW = (mx + CPAD * 2) * CPU;
+    const kbH = (my + CPAD * 2) * CPU;
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+    let hasVisible = false;
+    mappedLayers.forEach((_, i) => {
+      if (hiddenLayers[i]) return;
+      const p = layerPositions[i] || { x: 0, y: 0 };
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + kbW);
+      maxY = Math.max(maxY, p.y + kbH + CLABEL);
+      hasVisible = true;
+    });
+    if (!hasVisible) return;
+    const margin = 80;
+    minX -= margin;
+    minY -= margin;
+    maxX += margin;
+    maxY += margin;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
+    const baseVH = printOrientation === 'landscape' ? 1270 : 1700;
+    const requiredZoom = Math.max(contentW / baseVW, contentH / baseVH);
+    const finalZoom = Math.max(0.2, Math.min(5.0, requiredZoom));
+    setPrintZoom(finalZoom);
+    const VW = baseVW * finalZoom;
+    const VH = baseVH * finalZoom;
+    const centerX = minX + contentW / 2;
+    const centerY = minY + contentH / 2;
+    setViewOff({
+      x: centerX - VW / 2,
+      y: centerY - VH / 2
+    });
+  };
+
+  const downloadPrintSVG = () => {
+    const el = document.getElementById('print-svg');
+    if (!el) return;
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.no-print').forEach(el => el.remove());
+    const src = '<?xml version="1.0" standalone="no">\n' + new XMLSerializer().serializeToString(clone);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    a.download = `cheatsheet_print_${printOrientation}.svg`;
+    a.click();
+  };
+
+  useEffect(() => {
+    if (printMode) {
+      fitVisibleToPage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printMode, printOrientation]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (e.ctrlKey) {
+        const zoomFactor = 1.05;
+        setPrintZoom(prev => {
+          const next = e.deltaY < 0 ? prev / zoomFactor : prev * zoomFactor;
+          return Math.max(0.2, Math.min(5.0, next));
+        });
+      } else {
+        setViewOff(prev => ({
+          x: prev.x + e.deltaX,
+          y: prev.y + e.deltaY
+        }));
+      }
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, [printMode]);
+
+  // SVG coordinate helper — uses frozen CTM to avoid feedback during drag
+  const toSVG = (e) => {
+    const svg = svgRef.current; if (!svg) return {x:0,y:0};
+    const ctm = dragCTM.current || svg.getScreenCTM().inverse();
+    const pt  = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(ctm);
+  };
+
+  const onCanvasDown = (e) => {
+    const svg = svgRef.current; if (!svg) return;
+    dragCTM.current = svg.getScreenCTM().inverse();
+    const {x,y} = toSVG(e);
+    setSvgDrag({ type:'pan', sx:x, sy:y, ox:viewOff.x, oy:viewOff.y });
+  };
+  const onLayerDown = (e, layerIdx) => {
+    e.stopPropagation();
+    const svg = svgRef.current; if (!svg) return;
+    dragCTM.current = svg.getScreenCTM().inverse();
+    const {x,y} = toSVG(e);
+    const p = layerPositions[layerIdx] || {x:0,y:0};
+    setSvgDrag({ type:'layer', layerIdx, sx:x, sy:y, ox:p.x, oy:p.y });
+  };
+  const onArrowHandleDown = (e, arrowId, pointIndex, curX, curY) => {
+    e.stopPropagation();
+    const svg = svgRef.current; if (!svg) return;
+    dragCTM.current = svg.getScreenCTM().inverse();
+    const {x,y} = toSVG(e);
+    setSvgDrag({ type: 'arrowControl', arrowId, pointIndex, sx: x, sy: y, ox: curX, oy: curY });
+  };
+  const onSVGMove = (e) => {
+    if (!svgDrag) return;
+    const {x,y} = toSVG(e);
+    const dx=x-svgDrag.sx, dy=y-svgDrag.sy;
+    if (svgDrag.type==='pan') {
+      setViewOff({ x:svgDrag.ox-dx, y:svgDrag.oy-dy });
+    } else if (svgDrag.type==='layer') {
+      const activeLayerIdx = svgDrag.layerIdx;
+      const targetX = svgDrag.ox + dx;
+      const targetY = svgDrag.oy + dy;
+      
+      let snappedX = targetX;
+      let snappedY = targetY;
+      let guides = [];
+      const threshold = 12; // snap threshold in px
+      
+      const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
+      const my = Math.max(...parsedKeys.map(k => k.y + k.h));
+      const kbW = (mx + CPAD * 2) * CPU;
+      const kbH = (my + CPAD * 2) * CPU;
+      
+      mappedLayers.forEach((_, i) => {
+        if (i === activeLayerIdx || hiddenLayers[i]) return;
+        const otherP = layerPositions[i] || { x: 0, y: 0 };
+        
+        const otherLeft = otherP.x;
+        const otherRight = otherP.x + kbW;
+        const otherCenterX = otherP.x + kbW / 2;
+        
+        const otherTop = otherP.y;
+        const otherBottom = otherP.y + kbH + CLABEL;
+        const otherCenterY = otherP.y + (kbH + CLABEL) / 2;
+        
+        const curLeft = targetX;
+        const curRight = targetX + kbW;
+        const curCenterX = targetX + kbW / 2;
+        
+        const curTop = targetY;
+        const curBottom = targetY + kbH + CLABEL;
+        const curCenterY = targetY + (kbH + CLABEL) / 2;
+        
+        // Snap X (Vertical lines)
+        if (Math.abs(curLeft - otherLeft) < threshold) {
+          snappedX = otherLeft;
+          guides.push({ type: 'v', x: otherLeft, y1: Math.min(targetY, otherTop), y2: Math.max(targetY + kbH + CLABEL, otherBottom) });
+        } else if (Math.abs(curRight - otherRight) < threshold) {
+          snappedX = otherRight - kbW;
+          guides.push({ type: 'v', x: otherRight, y1: Math.min(targetY, otherTop), y2: Math.max(targetY + kbH + CLABEL, otherBottom) });
+        } else if (Math.abs(curCenterX - otherCenterX) < threshold) {
+          snappedX = otherCenterX - kbW / 2;
+          guides.push({ type: 'v', x: otherCenterX, y1: Math.min(targetY, otherTop), y2: Math.max(targetY + kbH + CLABEL, otherBottom) });
+        } else if (Math.abs(curLeft - otherRight) < threshold) {
+          snappedX = otherRight;
+          guides.push({ type: 'v', x: otherRight, y1: Math.min(targetY, otherTop), y2: Math.max(targetY + kbH + CLABEL, otherBottom) });
+        } else if (Math.abs(curRight - otherLeft) < threshold) {
+          snappedX = otherLeft - kbW;
+          guides.push({ type: 'v', x: otherLeft, y1: Math.min(targetY, otherTop), y2: Math.max(targetY + kbH + CLABEL, otherBottom) });
+        }
+        
+        // Snap Y (Horizontal lines)
+        if (Math.abs(curTop - otherTop) < threshold) {
+          snappedY = otherTop;
+          guides.push({ type: 'h', y: otherTop, x1: Math.min(targetX, otherLeft), x2: Math.max(targetX + kbW, otherRight) });
+        } else if (Math.abs(curBottom - otherBottom) < threshold) {
+          snappedY = otherBottom - (kbH + CLABEL);
+          guides.push({ type: 'h', y: otherBottom, x1: Math.min(targetX, otherLeft), x2: Math.max(targetX + kbW, otherRight) });
+        } else if (Math.abs(curCenterY - otherCenterY) < threshold) {
+          snappedY = otherCenterY - (kbH + CLABEL) / 2;
+          guides.push({ type: 'h', y: otherCenterY, x1: Math.min(targetX, otherLeft), x2: Math.max(targetX + kbW, otherRight) });
+        } else if (Math.abs(curTop - otherBottom) < threshold) {
+          snappedY = otherBottom;
+          guides.push({ type: 'h', y: otherBottom, x1: Math.min(targetX, otherLeft), x2: Math.max(targetX + kbW, otherRight) });
+        } else if (Math.abs(curBottom - otherTop) < threshold) {
+          snappedY = otherTop - (kbH + CLABEL);
+          guides.push({ type: 'h', y: otherTop, x1: Math.min(targetX, otherLeft), x2: Math.max(targetX + kbW, otherRight) });
+        }
+      });
+      
+      setLayerPos(prev => ({ ...prev, [activeLayerIdx]: { x: snappedX, y: snappedY } }));
+      setSnapGuides(guides);
+    } else if (svgDrag.type==='arrowControl') {
+      const idx = svgDrag.pointIndex;
+      const arrow = arrowsRef.current.find(a => a.arrowId === svgDrag.arrowId);
+      if (arrow) {
+        setArrowMidpoints(prev => {
+          const current = prev[svgDrag.arrowId] || [arrow.p0, arrow.p1, arrow.p2];
+          const points = [...current];
+          points[idx] = { x: svgDrag.ox + dx, y: svgDrag.oy + dy };
+          return { ...prev, [svgDrag.arrowId]: points };
+        });
+      }
+    }
+  };
+  const onSVGUp = () => {
+    setSvgDrag(null);
+    dragCTM.current=null;
+    setSnapGuides([]);
+  };
+
+  // Render keys for one layer at an offset (print scale)
+  const renderCanvasKeys = (layerIdx, offX, offY) =>
+    (mappedLayers[layerIdx]||[]).map((key,i) => {
+      const style = keyStyle(key);
+      if (style.invisible) return null;
+      const x=(key.x+CPAD)*CPU+offX, y=(key.y+CPAD)*CPU+offY;
+      const kw=key.w*CPU, kh=key.h*CPU;
+      const bx=x+CPG/2, by=y+CPG/2, bw=kw-CPG, bh=kh-CPG;
+      const {label}=translateKeycode(key.keycode??'');
+      const lines=(formatLabel(label,labelMode)??'').split('\n');
+      const tr=key.r?`rotate(${key.r} ${(key.rx+CPAD)*CPU+offX} ${(key.ry+CPAD)*CPU+offY})`:undefined;
+      if (style.nested) {
+        const tap=lines[0]??'', hold=(lines[1]??'').replace(/[()]/g,'');
+        const ip=2,ir=Math.max(0,CPR-2),ih=Math.round(bh*0.52),iw=bw-ip*2;
+        const ix=bx+ip,iy=by+ip,hy=iy+ih+(bh-ih-ip)/2+CPF*0.35;
+        return (<g key={i} transform={tr}>
+          {theme.id !== 'mono_print' && <rect x={bx} y={by+1} width={bw} height={bh} fill="rgba(0,0,0,0.12)" rx={CPR}/>}
+          <rect x={bx} y={by} width={bw} height={bh} fill={style.fill} stroke={theme.boardColor} strokeWidth={1} rx={CPR}/>
+          <text x={bx+bw/2} y={hy} textAnchor="middle" fontSize={CPF*0.78} fill={style.text} fontWeight="700" style={{userSelect:'none'}}>{hold}</text>
+          {theme.id !== 'mono_print' && <rect x={ix} y={iy+1} width={iw} height={ih} fill="rgba(0,0,0,0.15)" rx={ir}/>}
+          <rect x={ix} y={iy} width={iw} height={ih} fill={theme.keyAlpha} stroke={theme.boardColor} strokeWidth={0.75} rx={ir}/>
+          <text x={ix+iw/2} y={iy+ih/2+CPF*0.35} textAnchor="middle" fontSize={CPF} fill={theme.keyAlphaText} fontWeight="700" style={{userSelect:'none'}}>{tap}</text>
+        </g>);
+      }
+      return (<g key={i} transform={tr}>
+        {!style.ghost&&theme.id !== 'mono_print'&&<rect x={bx} y={by+1} width={bw} height={bh} fill="rgba(0,0,0,0.12)" rx={CPR}/>}
+        <rect x={bx} y={by} width={bw} height={bh}
+          fill={style.fill}
+          stroke={style.ghost?theme.keyAlpha+'66':style.dashed?theme.keyModifierText+'44':theme.boardColor}
+          strokeWidth={1} strokeDasharray={style.dashed?'3 2':style.ghost?'2 2':undefined} rx={CPR}/>
+        {!style.ghost&&(
+          <text x={x+kw/2} y={y+kh/2+(lines.length>1?-CPF/2:CPF/3.5)}
+            textAnchor="middle" fontSize={CPF} fill={style.text} fontWeight="600" style={{userSelect:'none'}}>
+            {lines.map((ln,li)=><tspan key={li} x={x+kw/2} dy={li>0?CPF+1.5:0}>{ln}</tspan>)}
+          </text>
+        )}
+      </g>);
+    });
+
+  const toggleLayerVisibility = (layerIdx) => {
+    setHiddenLayers(prev => ({ ...prev, [layerIdx]: !prev[layerIdx] }));
+  };
+
+  // Build spread+obstacle-avoiding arrows
+  const buildCanvasArrows = () => {
+    if (!parsedKeys.length) return [];
+    const mx=Math.max(...parsedKeys.map(k=>k.x+k.w));
+    const my=Math.max(...parsedKeys.map(k=>k.y+k.h));
+    const kbW=(mx+CPAD*2)*CPU, kbH=(my+CPAD*2)*CPU;
+
+    // Bounding boxes for each layer card
+    const boxes = {};
+    mappedLayers.forEach((_,i) => {
+      const p=layerPositions[i]||{x:0,y:0};
+      boxes[i]={x1:p.x, y1:p.y, x2:p.x+kbW, y2:p.y+kbH+CLABEL};
+    });
+
+    const arrows=[]; let gIdx=0;
+    mappedLayers.forEach((_,fromLayer) => {
+      if (hiddenLayers[fromLayer]) return;
+      (mappedLayers[fromLayer]||[]).forEach((key, keyIndex) => {
+        const to = getTargetLayer(key.keycode??'');
+        if (to===null||to===fromLayer||!layerPositions[to]||!layerPositions[fromLayer]) return;
+        if (hiddenLayers[to]) return;
+        const fp=layerPositions[fromLayer], tp=layerPositions[to];
+        const sx=fp.x+(key.x+CPAD)*CPU+key.w*CPU/2;
+        const sy=fp.y+CLABEL+(key.y+CPAD)*CPU+key.h*CPU/2;
+        const ex=tp.x+kbW/2;
+        const ey=tp.y+CLABEL*0.4;
+
+        // perpendicular spread based on global arrow index
+        const dx=ex-sx, dy=ey-sy, len=Math.sqrt(dx*dx+dy*dy)||1;
+        const px=-dy/len, py=dx/len; // perpendicular unit
+        const spread=(gIdx%7-3)*14;  // -42..+42 in steps of 14
+        const arcH=50+(gIdx%5)*18;   // 50,68,86,104,122
+
+        const arrowId = `${fromLayer}-${keyIndex}`;
+        const custom = arrowMidpoints[arrowId];
+
+        const c1x=sx+dx*0.25+px*(spread+arcH*0.3);
+        const c1y=sy+dy*0.25+py*(spread+arcH*0.3);
+        const c2x=ex-dx*0.25+px*(spread+arcH*0.2);
+        const c2y=ey-dy*0.25+py*(spread+arcH*0.2);
+        let mx2=(c1x+c2x)/2, my2=(c1y+c2y)/2;
+
+        // Push mid-control out of any blocking layer bounding box
+        Object.entries(boxes).forEach(([bi,b]) => {
+          if (+bi===fromLayer||+bi===to) return;
+          if (mx2>b.x1&&mx2<b.x2&&my2>b.y1&&my2<b.y2) {
+            const dists=[
+              {d:mx2-b.x1,dir:'left'},  {d:b.x2-mx2,dir:'right'},
+              {d:my2-b.y1,dir:'top'},   {d:b.y2-my2,dir:'bottom'},
+            ];
+            const {d,dir}=dists.reduce((a,v)=>v.d<a.d?v:a);
+            const push=d+30;
+            if (dir==='left')  { mx2-=push; }
+            if (dir==='right') { mx2+=push; }
+            if (dir==='top')   { my2-=push; }
+            if (dir==='bottom'){ my2+=push; }
+          }
+        });
+
+        const p0 = (custom && custom[0]) ? custom[0] : { x: c1x, y: c1y };
+        const p1 = (custom && custom[1]) ? custom[1] : { x: mx2, y: my2 };
+        const p2 = (custom && custom[2]) ? custom[2] : { x: c2x, y: c2y };
+
+        arrows.push({
+          arrowId,
+          fromLayer,
+          toLayer: to,
+          sx, sy, ex, ey,
+          p0, p1, p2,
+          color: theme.id === 'mono_print' ? '#000000' : ARROW_COLORS[to%8]
+        });
+        gIdx++;
+      });
+    });
+    return arrows;
+  };
+
+  const renderInteractiveCanvas = () => {
+    if (!parsedKeys.length||!mappedLayers.length) return null;
+    const mx=Math.max(...parsedKeys.map(k=>k.x+k.w));
+    const my=Math.max(...parsedKeys.map(k=>k.y+k.h));
+    const kbW=(mx+CPAD*2)*CPU, kbH=(my+CPAD*2)*CPU;
+    const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
+    const baseVH = printOrientation === 'landscape' ? 1270 : 1700;
+    const VW = baseVW * printZoom;
+    const VH = baseVH * printZoom;
+    const arrows=buildCanvasArrows();
+    arrowsRef.current = arrows;
+    const isDraggingLayer = svgDrag?.type==='layer';
+
+    return (
+      <svg ref={svgRef}
+        id="print-svg"
+        viewBox={`${viewOff.x} ${viewOff.y} ${VW} ${VH}`}
+        style={{display:'block',width:'100%',height:'70vh',cursor:svgDrag?'grabbing':'grab',fontFamily}}
+        onMouseDown={onCanvasDown}
+        onMouseMove={onSVGMove}
+        onMouseUp={onSVGUp}
+        onMouseLeave={onSVGUp}
+      >
+        {/* Infinite background */}
+        <rect x={-5000} y={-5000} width={15000} height={15000} fill={theme.bg}/>
+        {/* Dot grid */}
+        <pattern id="dot-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+          <circle cx="20" cy="20" r="1" fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.15)' : theme.keyAlpha+'22'}/>
+        </pattern>
+        <rect x={-5000} y={-5000} width={15000} height={15000} fill="url(#dot-grid)" className="no-print"/>
+
+        {/* Arrow shadows */}
+        {!disableArrows && arrows.map((a,i)=>(
+          <path key={`as${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
+            fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth={3} className="no-print"/>
+        ))}
+
+        {/* Layer keyboards */}
+        {mappedLayers.map((_,layerIdx) => {
+          if (hiddenLayers[layerIdx]) return null;
+          const p=layerPositions[layerIdx]||{x:0,y:0};
+          const isActive=svgDrag?.layerIdx===layerIdx;
+          return (
+            <g key={layerIdx} transform={`translate(${p.x},${p.y})`}
+              onMouseDown={e=>onLayerDown(e,layerIdx)}
+              style={{cursor:isDraggingLayer&&isActive?'grabbing':'grab'}}
+            >
+              {/* Card shadow when dragging */}
+              {isActive&&theme.id !== 'mono_print'&&<rect x={2} y={2} width={kbW} height={kbH+CLABEL} fill="rgba(0,0,0,0.35)" rx={CPR+4}/>}
+              {/* Drag handle / label bar */}
+              <rect x={0} y={0} width={kbW} height={CLABEL}
+                fill={theme.id === 'mono_print' ? '#ffffff' : theme.boardColor} rx={CPR+2}
+                stroke={theme.id === 'mono_print' ? '#000000' : (isActive?ARROW_COLORS[layerIdx%8]:'transparent')} strokeWidth={1.5}/>
+              <text x={kbW/2} y={CLABEL*0.68}
+                textAnchor="middle" fontSize={13} fontWeight="800"
+                fill={theme.id === 'mono_print' ? '#000000' : ARROW_COLORS[layerIdx%8]} style={{userSelect:'none',pointerEvents:'none'}}
+              >Layer {layerIdx}</text>
+              {/* Quick Hide button */}
+              <g className="no-print" style={{ cursor: 'pointer' }}
+                onMouseDown={e => { e.stopPropagation(); toggleLayerVisibility(layerIdx); }}
+              >
+                <circle cx={kbW - 14} cy={CLABEL / 2} r={8} fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)'} />
+                <text x={kbW - 14} y={CLABEL / 2 + 3} textAnchor="middle" fontSize={10} fill={theme.id === 'mono_print' ? '#000000' : '#ffffff'} fontWeight="bold" style={{ userSelect: 'none' }}>×</text>
+              </g>
+              {/* Board bezel */}
+              <rect x={CPAD*CPU-6} y={CLABEL+CPAD*CPU-6}
+                width={kbW-CPAD*2*CPU+12} height={kbH-CPAD*2*CPU+12}
+                fill={theme.id === 'mono_print' ? '#ffffff' : theme.boardColor}
+                stroke={theme.id === 'mono_print' ? '#000000' : 'none'}
+                strokeWidth={theme.id === 'mono_print' ? 1.5 : 0}
+                rx={CPR+4}/>
+              {/* Keys */}
+              <g style={{pointerEvents:'none'}}>{renderCanvasKeys(layerIdx,0,CLABEL)}</g>
+            </g>
+          );
+        })}
+
+        {/* Arrows */}
+        {!disableArrows && arrows.map((a,i)=>(
+          <g key={`a${i}`} style={{pointerEvents:'none'}}>
+            <path d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
+              fill="none" stroke={a.color} strokeWidth={1.8} strokeDasharray="6 3" opacity={0.9}/>
+            <circle cx={a.ex} cy={a.ey} r={4} fill={a.color}/>
+            <circle cx={a.sx} cy={a.sy} r={2.5} fill={a.color} opacity={0.7}/>
+          </g>
+        ))}
+
+        {/* Draggable Arrow Handles */}
+        {!disableArrows && arrows.map((a,i)=>{
+          const p0 = a.p0;
+          const p1 = a.p1;
+          const p2 = a.p2;
+          const isDraggingThis = svgDrag && svgDrag.type === 'arrowControl' && svgDrag.arrowId === a.arrowId;
+          return (
+            <g key={`ah${i}`} className="no-print">
+              {/* Faint visual helpers for active editing */}
+              {isDraggingThis && (
+                <g style={{pointerEvents:'none'}} opacity={0.45}>
+                  <line x1={a.sx} y1={a.sy} x2={p0.x} y2={p0.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3"/>
+                  <line x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3"/>
+                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3"/>
+                  <line x1={p2.x} y1={p2.y} x2={a.ex} y2={a.ey} stroke={a.color} strokeWidth={1} strokeDasharray="3 3"/>
+                </g>
+              )}
+              {/* Handle 0 */}
+              <circle cx={p0.x} cy={p0.y} r={12} fill="transparent" style={{cursor:'move'}}
+                onMouseDown={e => onArrowHandleDown(e, a.arrowId, 0, p0.x, p0.y)}/>
+              <circle cx={p0.x} cy={p0.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{pointerEvents:'none'}}/>
+
+              {/* Handle 1 */}
+              <circle cx={p1.x} cy={p1.y} r={12} fill="transparent" style={{cursor:'move'}}
+                onMouseDown={e => onArrowHandleDown(e, a.arrowId, 1, p1.x, p1.y)}/>
+              <circle cx={p1.x} cy={p1.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{pointerEvents:'none'}}/>
+
+              {/* Handle 2 */}
+              <circle cx={p2.x} cy={p2.y} r={12} fill="transparent" style={{cursor:'move'}}
+                onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, p2.x, p2.y)}/>
+              <circle cx={p2.x} cy={p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{pointerEvents:'none'}}/>
+            </g>
+          );
+        })}
+
+        {/* Smart alignment guides */}
+        {snapGuides.map((g, idx) => {
+          if (g.type === 'v') {
+            return (
+              <line key={`sg${idx}`} x1={g.x} y1={g.y1 - 60} x2={g.x} y2={g.y2 + 60}
+                stroke="#ff4d4d" strokeWidth={1.5} strokeDasharray="5 3" className="no-print" />
+            );
+          } else {
+            return (
+              <line key={`sg${idx}`} x1={g.x1 - 60} y1={g.y} x2={g.x2 + 60} y2={g.y}
+                stroke="#ff4d4d" strokeWidth={1.5} strokeDasharray="5 3" className="no-print" />
+            );
+          }
+        })}
+      </svg>
+    );
   };
 
   // ── Combo label helper ─────────────────────────────────────────────────────
@@ -405,9 +981,19 @@ export default function CheatsheetMaker() {
         </div>
         <div className="header-actions">
           {mappedLayers.length > 0 && (
-            <button className="btn btn-secondary" onClick={() => window.print()}>
-              🖨️ Print
-            </button>
+            <>
+              <button
+                className={`btn ${printMode ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setPrintMode(p => !p)}
+              >
+                {printMode ? '← Edit View' : '📄 Print Layout'}
+              </button>
+              {printMode && (
+                <button className="btn btn-secondary" onClick={() => window.print()}>
+                  🖨️ Print
+                </button>
+              )}
+            </>
           )}
           <button className="btn btn-primary" onClick={() => fileInputRef.current.click()}>
             📂 Upload .vil File
@@ -432,6 +1018,88 @@ export default function CheatsheetMaker() {
                 <span className="empty-icon">⌨️</span>
                 <h3>Drop your .vil file here</h3>
                 <p>Or click to browse — Vial backup files (.vil / .json) are supported</p>
+              </div>
+            </div>
+          ) : printMode ? (
+            /* ── Interactive Canvas ──────────────────────────────────── */
+            <div className="print-layout-wrapper">
+              <style>{`
+                @media print {
+                  @page {
+                    size: A4 ${printOrientation === 'landscape' ? 'landscape' : 'portrait'};
+                    margin: 8mm;
+                  }
+                }
+              `}</style>
+              
+              {/* Print Toolbar */}
+              <div className="print-toolbar no-print">
+                <div className="print-toolbar-group">
+                  <span className="print-toolbar-label">A4 Layout:</span>
+                  <div className="print-toolbar-btn-group">
+                    <button 
+                      className={`print-btn-toggle ${printOrientation === 'landscape' ? 'active' : ''}`}
+                      onClick={() => setPrintOrientation('landscape')}
+                    >
+                      Landscape (Horizontal)
+                    </button>
+                    <button 
+                      className={`print-btn-toggle ${printOrientation === 'portrait' ? 'active' : ''}`}
+                      onClick={() => setPrintOrientation('portrait')}
+                    >
+                      Portrait (Vertical)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="print-toolbar-group" style={{ gap: '1rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--slate-200)', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} style={{ cursor: 'pointer' }} />
+                    <span>Show Arrows</span>
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--slate-200)', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} style={{ cursor: 'pointer' }} />
+                    <span>Color Layer Triggers</span>
+                  </label>
+                </div>
+
+                <div className="print-toolbar-group">
+                  <span className="print-toolbar-label">Zoom:</span>
+                  <button className="btn btn-secondary" onClick={() => setPrintZoom(z => Math.max(0.2, z - 0.1))} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>
+                    ➖
+                  </button>
+                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--slate-200)', minWidth: '45px', textAlign: 'center' }}>
+                    {Math.round(printZoom * 100)}%
+                  </span>
+                  <button className="btn btn-secondary" onClick={() => setPrintZoom(z => Math.min(5.0, z + 0.1))} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>
+                    ➕
+                  </button>
+                  <button className="btn btn-secondary" onClick={fitVisibleToPage} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', marginLeft: '6px' }} title="Scale and center all visible layers to fit on one page">
+                    🔍 Fit to Page
+                  </button>
+                </div>
+
+                <div className="print-toolbar-group">
+                  <button className="btn btn-secondary" onClick={downloadPrintSVG} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>
+                    💾 Download SVG
+                  </button>
+                  <button className="btn btn-primary" onClick={() => window.print()} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>
+                    🖨️ Print / PDF
+                  </button>
+                </div>
+              </div>
+
+              <div className="canvas-hint no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>🖱 Drag keyboards to arrange (snaps to align) · Drag 3 points on arrows to bend · Drag background/wheel to pan · Ctrl+Wheel to zoom</span>
+                {Object.keys(arrowMidpoints).length > 0 && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setArrowMidpoints({})} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>
+                    🔄 Reset Arrows
+                  </button>
+                )}
+              </div>
+              <div className="print-svg-container" style={{background:theme.bg,borderRadius:12,overflow:'hidden'}}>
+                {renderInteractiveCanvas()}
               </div>
             </div>
           ) : (
@@ -581,6 +1249,28 @@ export default function CheatsheetMaker() {
             )}
           </div>
 
+          {printMode && (
+            <div className="glass-card panel">
+              <h3>Visible Layers</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                {mappedLayers.map((_, idx) => {
+                  const isVisible = !hiddenLayers[idx];
+                  return (
+                    <button
+                      key={idx}
+                      className={`layer-tab ${isVisible ? 'active' : ''}`}
+                      onClick={() => toggleLayerVisibility(idx)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.45rem 0.6rem' }}
+                    >
+                      <span style={{ fontSize: '0.9rem' }}>{isVisible ? '👁️' : '🙈'}</span>
+                      <span>L{idx}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Style */}
           <div className="glass-card panel">
             <h3>Style</h3>
@@ -622,6 +1312,17 @@ export default function CheatsheetMaker() {
                 <option value="Fira Code">Fira Code</option>
                 <option value="JetBrains Mono">JetBrains Mono</option>
               </select>
+            </div>
+
+            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.8rem', paddingBottom: '0.4rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--slate-200)', cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} style={{ cursor: 'pointer' }} />
+                <span>Show Connecting Arrows</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--slate-200)', cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} style={{ cursor: 'pointer' }} />
+                <span>Color Layer Trigger Keys</span>
+              </label>
             </div>
 
             <div className="sliders-grid">

@@ -6,7 +6,7 @@ function App() {
   return (
     <div className="app-container">
       {/* Premium Top Navigation */}
-      <nav className="navbar">
+      <nav className="navbar no-print">
         <div className="navbar-logo">
           <span className="logo-accent">VIAL</span>
           <span className="logo-divider">//</span>
@@ -31,7 +31,7 @@ function App() {
       </main>
 
       {/* Modern Footer */}
-      <footer className="footer">
+      <footer className="footer no-print">
         <div className="footer-content">
           <p>© 2026 Vial Cheatsheet Maker. Built for mechanical keyboard enthusiasts.</p>
           <div className="footer-badges">
