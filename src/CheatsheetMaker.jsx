@@ -3,658 +3,527 @@ import { PRESETS } from './presets';
 import { translateKeycode } from './keycodes';
 import { parseKLE, mapLayersToLayout } from './kleParser';
 
-// Premium GMK-inspired & Custom Theme configurations
+// ── Themes ──────────────────────────────────────────────────────────────────
 const THEMES = {
   gmk_olivia: {
-    id: "gmk_olivia",
-    name: "GMK Olivia (Pink & Dark)",
-    bg: "#1c1c1c",
-    keyAlpha: "#f1e3dc",
-    keyAlphaText: "#1c1c1c",
-    keyModifier: "#2d2d2d",
-    keyModifierText: "#f1e3dc",
-    keyAccent: "#eab8b1",
-    keyAccentText: "#1c1c1c",
-    textColor: "#ffffff",
-    boardColor: "#121212"
+    id: 'gmk_olivia', name: 'GMK Olivia',
+    bg: '#1c1c1c', keyAlpha: '#f1e3dc', keyAlphaText: '#1c1c1c',
+    keyModifier: '#2d2d2d', keyModifierText: '#f1e3dc',
+    keyAccent: '#eab8b1', keyAccentText: '#1c1c1c',
+    boardColor: '#121212',
   },
   gmk_laser: {
-    id: "gmk_laser",
-    name: "GMK Laser (Synthwave)",
-    bg: "#0d0a1b",
-    keyAlpha: "#005f73",
-    keyAlphaText: "#ff007f",
-    keyModifier: "#1b1834",
-    keyModifierText: "#00f0ff",
-    keyAccent: "#ff007f",
-    keyAccentText: "#ffffff",
-    textColor: "#ff007f",
-    boardColor: "#06040f"
+    id: 'gmk_laser', name: 'GMK Laser',
+    bg: '#0d0a1b', keyAlpha: '#005f73', keyAlphaText: '#ff007f',
+    keyModifier: '#1b1834', keyModifierText: '#00f0ff',
+    keyAccent: '#ff007f', keyAccentText: '#ffffff',
+    boardColor: '#06040f',
   },
   gmk_carbon: {
-    id: "gmk_carbon",
-    name: "GMK Carbon (Orange & Charcoal)",
-    bg: "#202020",
-    keyAlpha: "#eae6df",
-    keyAlphaText: "#2d2d2d",
-    keyModifier: "#4d4d4d",
-    keyModifierText: "#ff6600",
-    keyAccent: "#ff6600",
-    keyAccentText: "#ffffff",
-    textColor: "#eae6df",
-    boardColor: "#141414"
+    id: 'gmk_carbon', name: 'GMK Carbon',
+    bg: '#202020', keyAlpha: '#eae6df', keyAlphaText: '#2d2d2d',
+    keyModifier: '#4d4d4d', keyModifierText: '#ff6600',
+    keyAccent: '#ff6600', keyAccentText: '#ffffff',
+    boardColor: '#141414',
   },
   sleek_dark: {
-    id: "sleek_dark",
-    name: "Cyber Slate (Dark Mode)",
-    bg: "#0f172a",
-    keyAlpha: "#1e293b",
-    keyAlphaText: "#f8fafc",
-    keyModifier: "#334155",
-    keyModifierText: "#cbd5e1",
-    keyAccent: "#3b82f6",
-    keyAccentText: "#ffffff",
-    textColor: "#f8fafc",
-    boardColor: "#020617"
+    id: 'sleek_dark', name: 'Cyber Slate',
+    bg: '#0f172a', keyAlpha: '#1e293b', keyAlphaText: '#f8fafc',
+    keyModifier: '#334155', keyModifierText: '#cbd5e1',
+    keyAccent: '#3b82f6', keyAccentText: '#ffffff',
+    boardColor: '#020617',
   },
   minimal_light: {
-    id: "minimal_light",
-    name: "Minimalist Light",
-    bg: "#f8fafc",
-    keyAlpha: "#ffffff",
-    keyAlphaText: "#0f172a",
-    keyModifier: "#e2e8f0",
-    keyModifierText: "#334155",
-    keyAccent: "#0f172a",
-    keyAccentText: "#ffffff",
-    textColor: "#0f172a",
-    boardColor: "#cbd5e1"
-  }
+    id: 'minimal_light', name: 'Light',
+    bg: '#f8fafc', keyAlpha: '#ffffff', keyAlphaText: '#0f172a',
+    keyModifier: '#e2e8f0', keyModifierText: '#334155',
+    keyAccent: '#0f172a', keyAccentText: '#ffffff',
+    boardColor: '#cbd5e1',
+  },
 };
 
-const CheatsheetMaker = () => {
-  // Preset Selection
-  const [selectedPresetKey, setSelectedPresetKey] = useState("corne");
-  
-  // Layout & Matrix state (instantiated with selected preset)
-  const [parsedKeys, setParsedKeys] = useState([]);
-  const [parsedMatrix, setParsedMatrix] = useState({ rows: 4, cols: 12 });
-  
-  // Keymap layers state (from uploaded .vil or presets)
-  const [uploadedLayers, setUploadedLayers] = useState(null);
+// ── Label formatting maps ────────────────────────────────────────────────────
+const ABBREV_MAP = {
+  'Backspace': 'Bksp', 'Space': 'Spc', 'Enter': 'Ent',
+  'Delete': 'Del', 'Insert': 'Ins', 'Shift': 'Shft',
+  'Play/Pause': 'Play', 'PgUp': 'PgUp', 'PgDn': 'PgDn',
+  'Scroll': 'Scrl', 'Pause': 'Paus',
+};
+
+const EMOJI_MAP = {
+  'Space': '⎵', 'Backspace': '⌫', 'Enter': '↵', 'Tab': '⇥',
+  'Shift': '⇧', 'Caps': '⇪', 'GUI': '⌘', 'Delete': '⌦',
+  'Esc': '⎋', 'Vol+': '🔊', 'Vol-': '🔉', 'Mute': '🔇',
+  'Play/Pause': '⏯', 'Next': '⏭', 'Prev': '⏮',
+  'PrtSc': '📷', 'Home': '⇱', 'End': '⇲',
+  'PgUp': '⇞', 'PgDn': '⇟', '▽': '▽',
+};
+
+function formatLabel(label, mode) {
+  if (!label) return label;
+  // Only transform the first line (for tap/mod labels that have \n)
+  const lines = label.split('\n');
+  const first = lines[0];
+  if (mode === 'abbrev') lines[0] = ABBREV_MAP[first] ?? first;
+  else if (mode === 'emoji') lines[0] = EMOJI_MAP[first] ?? first;
+  return lines.join('\n');
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
+export default function CheatsheetMaker() {
+  // Layout data
+  const [parsedKeys, setParsedKeys]     = useState([]);
+  const [parsedMatrix, setParsedMatrix] = useState({ rows: 10, cols: 6 });
   const [mappedLayers, setMappedLayers] = useState([]);
-  const [activeLayer, setActiveLayer] = useState(0);
-  
-  // Custom Styling
-  const [activeThemeId, setActiveThemeId] = useState("gmk_olivia");
-  const [unitSize, setUnitSize] = useState(55);
-  const [keySpacing, setKeySpacing] = useState(4);
-  const [keyRoundness, setKeyRoundness] = useState(6);
-  const [fontSize, setFontSize] = useState(13);
-  const [borderWidth, setBorderWidth] = useState(1.5);
-  const [fontFamily, setFontFamily] = useState("Inter");
-  
-  // Rendering details
-  const [showMatrixCoords, setShowMatrixCoords] = useState(false);
-  const [transparentBg, setTransparentBg] = useState(false);
-  
-  // Interactive Overrides
-  const [selectedKeyIdx, setSelectedKeyIdx] = useState(null);
-  const [keyOverrides, setKeyOverrides] = useState({}); // e.g., { keyIndex: { label: '', color: '', textColor: '', type: '' } }
-  
-  // Notifications/Feedback
-  const [notification, setNotification] = useState(null);
+  const [fileName, setFileName]         = useState('');
+
+  // Extras from .vil
+  const [combos, setCombos]         = useState([]);   // active combos
+  const [tapDances, setTapDances]   = useState([]);   // active tap dances
+
+  // Preset / view
+  const [selectedPreset, setSelectedPreset] = useState('split58');
+  const [activeLayer, setActiveLayer]       = useState(null); // null = all
+
+  // Style
+  const [themeId, setThemeId]       = useState('gmk_olivia');
+  const [unitSize, setUnitSize]     = useState(50);
+  const [keyGap, setKeyGap]         = useState(3);
+  const [radius, setRadius]         = useState(6);
+  const [fontSize, setFontSize]     = useState(12);
+  const [fontFamily, setFontFamily] = useState('Inter');
+  const [labelMode, setLabelMode]   = useState('default'); // 'default' | 'abbrev' | 'emoji'
+
+  // UI
   const [isDragging, setIsDragging] = useState(false);
-  
-  const svgRef = useRef(null);
+  const [toast, setToast]           = useState(null);
   const fileInputRef = useRef(null);
-  
-  const activeTheme = THEMES[activeThemeId] || THEMES.gmk_olivia;
-  
-  // Load Fonts dynamically
+
+  const theme = THEMES[themeId];
+
+  // Load Google Fonts once
   useEffect(() => {
-    const fontLink = document.getElementById('google-fonts-cheatsheet');
-    if (!fontLink) {
-      const link = document.createElement('link');
-      link.id = 'google-fonts-cheatsheet';
-      link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&family=Roboto:wght@400;700&display=swap';
-      document.head.appendChild(link);
+    if (!document.getElementById('gf-cheatsheet')) {
+      const l = document.createElement('link');
+      l.id = 'gf-cheatsheet';
+      l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@400;600;700&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap';
+      document.head.appendChild(l);
     }
   }, []);
 
-  // Update layout when preset is changed
+  // Rebuild coordinate keys when preset changes
   useEffect(() => {
-    if (selectedPresetKey !== "custom") {
-      const preset = PRESETS[selectedPresetKey];
-      if (preset) {
-        const keys = parseKLE(preset.keymap);
-        setParsedKeys(keys);
-        setParsedMatrix(preset.matrix);
-        setSelectedKeyIdx(null);
-        setKeyOverrides({});
-        
-        const layers = uploadedLayers || preset.defaultLayers;
-        const mapped = mapLayersToLayout(keys, layers, preset.matrix);
-        setMappedLayers(mapped);
-      }
-    }
-  }, [selectedPresetKey, uploadedLayers]);
+    const preset = PRESETS[selectedPreset];
+    if (!preset) return;
+    setParsedKeys(parseKLE(preset.keymap));
+    setParsedMatrix(preset.matrix);
+  }, [selectedPreset]);
 
-  // Re-map layouts whenever keys, layers, or matrix definitions change
-  useEffect(() => {
-    if (parsedKeys.length > 0) {
-      const layers = uploadedLayers || (PRESETS[selectedPresetKey]?.defaultLayers || [[]]);
-      const mapped = mapLayersToLayout(parsedKeys, layers, parsedMatrix);
+  const showToast = (type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // ── Parse .vil file ────────────────────────────────────────────────────────
+  const parseVilFile = (text, name) => {
+    try {
+      const data = JSON.parse(text);
+      if (!data.layout || !Array.isArray(data.layout)) {
+        showToast('error', 'Unrecognised format — expected a Vial .vil export.');
+        return;
+      }
+
+      // Flatten each 2D layer; -1 entries are phantom matrix positions (no physical key)
+      const flatLayers = data.layout.map(layer =>
+        layer.flat().map(k => (k === -1 ? '__PHANTOM__' : k))
+      );
+
+      const numRows = data.layout[0].length;
+      const numCols = data.layout[0][0]?.length ?? 6;
+      const matrix  = { rows: numRows, cols: numCols };
+
+      const presetKey = (numRows === 10 && numCols === 6) ? 'split58' : selectedPreset;
+      setSelectedPreset(presetKey);
+
+      const keys   = parseKLE(PRESETS[presetKey].keymap);
+      const mapped = mapLayersToLayout(keys, flatLayers, matrix);
+
+      setParsedKeys(keys);
+      setParsedMatrix(matrix);
       setMappedLayers(mapped);
-    }
-  }, [parsedKeys, uploadedLayers, parsedMatrix]);
+      setFileName(name);
+      setActiveLayer(null);
 
-  // Auto-hide notifications after 4s
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  // Handle file uploads
-  const handleUploadedFile = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        const data = JSON.parse(text);
-        
-        // 1. Check if it's a keymap file (.vil or has layers)
-        if (data.layers && Array.isArray(data.layers)) {
-          setUploadedLayers(data.layers);
-          setActiveLayer(0);
-          showToast('success', `Loaded keymap file with ${data.layers.length} layers!`);
-        } 
-        // 2. Check if it's a layout template (vial.json)
-        else if (data.layouts || (data.keys && Array.isArray(data.keys)) || Array.isArray(data)) {
-          let keysList = [];
-          let matrixInfo = { rows: 5, cols: 14 };
-          
-          if (data.layouts && data.layouts.keymap) {
-            keysList = parseKLE(data.layouts.keymap);
-            if (data.matrix) {
-              matrixInfo = data.matrix;
-            } else {
-              // Guess matrix size from coordinate labels "row,col"
-              const rows = Math.max(...keysList.map(k => {
-                const parts = k.label.split(',');
-                return parts.length === 2 ? parseInt(parts[0], 10) : 0;
-              })) + 1;
-              const cols = Math.max(...keysList.map(k => {
-                const parts = k.label.split(',');
-                return parts.length === 2 ? parseInt(parts[1], 10) : 0;
-              })) + 1;
-              matrixInfo = { rows, cols };
-            }
-          } else if (Array.isArray(data)) {
-            keysList = parseKLE(data);
-          } else if (data.keys) {
-            keysList = data.keys;
-          }
-          
-          setSelectedPresetKey("custom");
-          setParsedKeys(keysList);
-          setParsedMatrix(matrixInfo);
-          setSelectedKeyIdx(null);
-          setKeyOverrides({});
-          showToast('success', `Loaded custom layout definition containing ${keysList.length} keys!`);
-        } else {
-          showToast('error', 'Unrecognized JSON format. Upload a vial.json layout or .vil keymap file.');
-        }
-      } catch (err) {
-        showToast('error', 'Failed to parse JSON file: ' + err.message);
+      // ── Parse combos ──
+      if (data.combo) {
+        const active = data.combo
+          .map((c, i) => ({ idx: i, keys: c.slice(0, 4), action: c[4] }))
+          .filter(c => c.action && c.action !== 'KC_NO' && c.keys.some(k => k && k !== 'KC_NO'));
+        setCombos(active);
       }
-    };
+
+      // ── Parse tap dances ──
+      if (data.tap_dance) {
+        const active = data.tap_dance
+          .map((td, i) => ({
+            idx: i,
+            tap:       td[0], hold:     td[1],
+            doubleTap: td[2], tapHold:  td[3],
+            term:      td[4],
+          }))
+          .filter(td =>
+            [td.tap, td.hold, td.doubleTap, td.tapHold].some(k => k && k !== 'KC_NO')
+          );
+        setTapDances(active);
+      }
+
+      showToast('success', `Loaded "${name}" — ${flatLayers.length} layers, ${keys.length} keys`);
+    } catch (e) {
+      showToast('error', 'Failed to parse file: ' + e.message);
+    }
+  };
+
+  const handleFileInput = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => parseVilFile(e.target.result, file.name);
     reader.readAsText(file);
   };
 
-  const showToast = (type, message) => {
-    setNotification({ type, message });
-  };
-
-  // Drag and Drop handlers
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleUploadedFile(file);
-  };
-
-  const selectFile = (e) => {
-    const file = e.target.files?.[0];
-    if (file) handleUploadedFile(file);
-  };
-
-  // Dimension Calculations
-  const getLayoutDimensions = () => {
-    if (parsedKeys.length === 0) return { width: 0, height: 0, maxX: 0, maxY: 0 };
+  // ── SVG helpers ────────────────────────────────────────────────────────────
+  const getDims = () => {
+    if (!parsedKeys.length) return { w: 0, h: 0, pad: 0.5 };
+    const pad  = 0.5;
     const maxX = Math.max(...parsedKeys.map(k => k.x + k.w));
     const maxY = Math.max(...parsedKeys.map(k => k.y + k.h));
-    const padding = 0.5; // padding on outer edges
-    
-    return {
-      width: (maxX + padding * 2) * unitSize,
-      height: (maxY + padding * 2) * unitSize,
-      maxX,
-      maxY,
-      offset: padding
-    };
+    return { w: (maxX + pad * 2) * unitSize, h: (maxY + pad * 2) * unitSize, pad };
   };
 
-  // Render Styling Helper
-  const getKeycapStyles = (key, index) => {
-    const override = keyOverrides[index] || {};
-    const keyType = override.type || key.role;
-    
-    let fill = activeTheme.keyAlpha;
-    let stroke = activeTheme.boardColor;
-    let textColor = activeTheme.keyAlphaText;
-    
-    // Set colors based on role
-    if (keyType === "modifier") {
-      fill = activeTheme.keyModifier;
-      textColor = activeTheme.keyModifierText;
-    } else if (keyType === "accent" || keyType === "layer") {
-      fill = activeTheme.keyAccent;
-      textColor = activeTheme.keyAccentText;
-    } else if (keyType === "special" || keyType === "layertap" || keyType === "modtap") {
-      fill = activeTheme.keyModifier;
-      textColor = activeTheme.keyModifierText;
-    } else if (keyType === "trans") {
-      fill = activeTheme.bg;
-      textColor = activeTheme.textColor;
-      stroke = activeTheme.textColor + "55"; // translucent
-    } else if (keyType === "empty") {
-      fill = "transparent";
-      textColor = "transparent";
-      stroke = "transparent";
+  const keyStyle = (key) => {
+    const code = key.keycode ?? '';
+
+    // Phantom slots (were -1 in the .vil): truly invisible
+    if (code === '__PHANTOM__') return { invisible: true };
+
+    const { type } = translateKeycode(code);
+    switch (type) {
+      case 'modifier': return { fill: theme.keyModifier, text: theme.keyModifierText };
+      case 'layer':
+      case 'accent':   return { fill: theme.keyAccent,   text: theme.keyAccentText };
+      case 'layertap':
+      case 'modtap':
+      case 'special':  return { fill: theme.keyModifier, text: theme.keyModifierText };
+      case 'trans':    return { fill: theme.bg, text: theme.keyModifierText, dashed: true };
+      case 'empty':    return { fill: 'transparent', text: 'transparent', ghost: true };
+      default:         return { fill: theme.keyAlpha,    text: theme.keyAlphaText };
     }
-    
-    // Apply key-specific overrides if available
-    if (override.color) fill = override.color;
-    if (override.textColor) textColor = override.textColor;
-    
-    return { fill, stroke, textColor };
   };
 
-  // Update specific selected key property override
-  const updateKeyOverride = (field, value) => {
-    if (selectedKeyIdx === null) return;
-    setKeyOverrides(prev => ({
-      ...prev,
-      [selectedKeyIdx]: {
-        ...prev[selectedKeyIdx],
-        [field]: value
-      }
-    }));
+  const renderSVG = (layerIdx, keys) => {
+    const { w, h, pad } = getDims();
+    return (
+      <svg id={`layer-svg-${layerIdx}`} viewBox={`0 0 ${w} ${h}`} width="100%"
+        style={{ maxHeight: 420, fontFamily, display: 'block' }}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Board bezel */}
+        <rect x={pad * unitSize - 10} y={pad * unitSize - 10}
+          width={w - pad * 2 * unitSize + 20} height={h - pad * 2 * unitSize + 20}
+          fill={theme.boardColor} rx={radius + 6} ry={radius + 6} />
+
+        {keys.map((key, i) => {
+          const style = keyStyle(key);
+          if (style.invisible) return null;
+
+          const x = (key.x + pad) * unitSize;
+          const y = (key.y + pad) * unitSize;
+          const kw = key.w * unitSize;
+          const kh = key.h * unitSize;
+          const bx = x + keyGap / 2, by = y + keyGap / 2;
+          const bw = kw - keyGap,    bh = kh - keyGap;
+
+          const { label } = translateKeycode(key.keycode ?? '');
+          const formatted = formatLabel(label, labelMode);
+          const lines = (formatted ?? '').split('\n');
+
+          const transform = key.r
+            ? `rotate(${key.r} ${(key.rx + pad) * unitSize} ${(key.ry + pad) * unitSize})`
+            : undefined;
+
+          return (
+            <g key={i} transform={transform}>
+              {/* Drop shadow */}
+              {!style.ghost && (
+                <rect x={bx} y={by + 2} width={bw} height={bh}
+                  fill="rgba(0,0,0,0.15)" rx={radius} ry={radius} />
+              )}
+              {/* Keycap body */}
+              <rect x={bx} y={by} width={bw} height={bh}
+                fill={style.fill}
+                stroke={
+                  style.dashed ? theme.keyModifierText + '44'
+                  : style.ghost  ? theme.keyAlpha + '66'
+                  : theme.boardColor
+                }
+                strokeWidth={style.ghost ? 1.5 : 1.5}
+                strokeDasharray={style.dashed ? '4 3' : undefined}
+                rx={radius} ry={radius} />
+              {/* Inner highlight edge */}
+              {!style.dashed && !style.ghost && (
+                <rect x={bx + 2} y={by + 1} width={bw - 4} height={bh - 3}
+                  fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={1}
+                  rx={Math.max(0, radius - 2)} ry={Math.max(0, radius - 2)}
+                  pointerEvents="none" />
+              )}
+              {/* Legend */}
+              {!style.ghost && (
+                <text
+                  x={x + kw / 2}
+                  y={y + kh / 2 + (lines.length > 1 ? -fontSize / 2 : fontSize / 3.5)}
+                  textAnchor="middle" fontSize={fontSize} fill={style.text}
+                  fontWeight="600" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >
+                  {lines.map((ln, li) => (
+                    <tspan key={li} x={x + kw / 2} dy={li > 0 ? fontSize + 2 : 0}>{ln}</tspan>
+                  ))}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
   };
 
-  const resetSelectedKeyOverrides = () => {
-    if (selectedKeyIdx === null) return;
-    setKeyOverrides(prev => {
-      const copy = { ...prev };
-      delete copy[selectedKeyIdx];
-      return copy;
-    });
+  const downloadSVG = (layerIdx) => {
+    const el = document.getElementById(`layer-svg-${layerIdx}`);
+    if (!el) return;
+    const src = '<?xml version="1.0" standalone="no"?>\n' + new XMLSerializer().serializeToString(el);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    a.download = `layer_${layerIdx}.svg`;
+    a.click();
   };
 
-  const resetAllOverrides = () => {
-    setKeyOverrides({});
-    showToast('info', 'All overrides cleared.');
+  // ── Combo label helper ─────────────────────────────────────────────────────
+  const comboKeyLabel = (k) => {
+    if (!k || k === 'KC_NO') return null;
+    return translateKeycode(k).label || k;
   };
 
-  // Export functions
-  const downloadSVG = () => {
-    if (!svgRef.current) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svgRef.current);
-    const svgDoc = '<?xml version="1.0" standalone="no"?>\r\n' + source;
-    const blob = new Blob([svgDoc], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${selectedPresetKey}_layer${activeLayer}_layout.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast('success', 'SVG downloaded successfully!');
-  };
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const layersToRender = activeLayer === null
+    ? mappedLayers.map((_, i) => i)
+    : [activeLayer];
 
-  const copySVGCode = () => {
-    if (!svgRef.current) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svgRef.current);
-    navigator.clipboard.writeText(source).then(() => {
-      showToast('success', 'SVG markup copied to clipboard!');
-    }).catch(() => {
-      showToast('error', 'Failed to copy SVG code.');
-    });
-  };
-
-  const downloadPNG = () => {
-    if (!svgRef.current) return;
-    const svgElement = svgRef.current;
-    const serializer = new XMLSerializer();
-    const svgString = serializer.serializeToString(svgElement);
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const URL = window.URL || window.webkitURL || window;
-    const blobURL = URL.createObjectURL(svgBlob);
-    
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      // Render at double scale for sharpness
-      const scale = 2;
-      const width = (svgElement.clientWidth || svgElement.viewBox.baseVal.width);
-      const height = (svgElement.clientHeight || svgElement.viewBox.baseVal.height);
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      
-      const context = canvas.getContext('2d');
-      context.scale(scale, scale);
-      
-      if (!transparentBg) {
-        context.fillStyle = activeTheme.bg;
-        context.fillRect(0, 0, width, height);
-      }
-      
-      context.drawImage(image, 0, 0, width, height);
-      
-      const pngURL = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = pngURL;
-      link.download = `${selectedPresetKey}_layer${activeLayer}_layout.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobURL);
-      showToast('success', 'PNG downloaded successfully!');
-    };
-    image.src = blobURL;
-  };
-
-  // Main Render Logic
-  const activeKeys = mappedLayers[activeLayer] || parsedKeys.map(k => ({ ...k, keycode: "" }));
-  const { width: svgWidth, height: svgHeight, offset: paddingOffset } = getLayoutDimensions();
-  const selectedKeyInfo = selectedKeyIdx !== null ? activeKeys[selectedKeyIdx] : null;
-  const selectedKeyOverride = selectedKeyIdx !== null ? (keyOverrides[selectedKeyIdx] || {}) : {};
+  const hasExtras = combos.length > 0 || tapDances.length > 0;
 
   return (
     <div className="maker-container">
-      {/* Toast Notification */}
-      {notification && (
-        <div className={`toast toast-${notification.type}`}>
-          <div className="toast-content">{notification.message}</div>
+      {/* Toast */}
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          <div className="toast-content">{toast.msg}</div>
         </div>
       )}
 
-      {/* Header Area */}
+      {/* Header */}
       <header className="maker-header">
         <div className="header-info">
-          <h1>Vial Layout Cheatsheet Maker</h1>
-          <p>Design premium, print-ready keyboard layouts using QMK/Vial config files</p>
+          <h1>Vial Cheatsheet Generator</h1>
+          <p>Upload your <code>.vil</code> file to generate a cheatsheet for every layer</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => fileInputRef.current.click()}>
-            <span className="icon">📂</span> Upload File
+          {mappedLayers.length > 0 && (
+            <button className="btn btn-secondary" onClick={() => window.print()}>
+              🖨️ Print
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => fileInputRef.current.click()}>
+            📂 Upload .vil File
           </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept=".json,.vil"
-            onChange={selectFile}
-          />
+          <input type="file" ref={fileInputRef} style={{ display: 'none' }}
+            accept=".json,.vil" onChange={e => handleFileInput(e.target.files?.[0])} />
         </div>
       </header>
 
-      {/* Main Grid Workspace */}
       <div className="workspace-grid">
-        {/* Left Side: Interactive Keyboard Canvas */}
+        {/* ── Main canvas ─────────────────────────────────────────────────── */}
         <div className="canvas-wrapper">
-          <div 
-            className={`drag-zone ${isDragging ? 'dragging' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {isDragging && (
-              <div className="drag-overlay">
-                <div className="drag-message">
-                  <span className="drag-icon">📥</span>
-                  Drop your vial.json or .vil keymap here
-                </div>
-              </div>
-            )}
-
-            {parsedKeys.length === 0 ? (
+          {mappedLayers.length === 0 ? (
+            <div
+              className={`drag-zone ${isDragging ? 'dragging' : ''}`}
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={e => { e.preventDefault(); setIsDragging(false); handleFileInput(e.dataTransfer.files?.[0]); }}
+              onClick={() => fileInputRef.current.click()}
+            >
               <div className="empty-state">
                 <span className="empty-icon">⌨️</span>
-                <h3>No Keyboard Layout Loaded</h3>
-                <p>Select a built-in preset or drop your keyboard configuration file here.</p>
-                <div className="empty-buttons">
-                  <button className="btn btn-primary" onClick={() => setSelectedPresetKey("corne")}>
-                    Load Corne Preset
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => setSelectedPresetKey("ansi60")}>
-                    Load 60% ANSI Preset
-                  </button>
-                </div>
+                <h3>Drop your .vil file here</h3>
+                <p>Or click to browse — Vial backup files (.vil / .json) are supported</p>
               </div>
-            ) : (
-              <div className="svg-container" style={{ background: transparentBg ? 'transparent' : activeTheme.bg }}>
-                <svg
-                  ref={svgRef}
-                  width="100%"
-                  height="100%"
-                  viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                  style={{
-                    maxHeight: '480px',
-                    transition: 'all 0.3s ease',
-                    fontFamily: fontFamily
-                  }}
+            </div>
+          ) : (
+            <div>
+              {/* Layer filter tabs */}
+              <div className="layer-filter-bar">
+                <button
+                  className={`layer-tab ${activeLayer === null ? 'active' : ''}`}
+                  onClick={() => setActiveLayer(null)}
                 >
-                  {/* Keyboard Plate/Bezel Background */}
-                  <rect
-                    x={paddingOffset * unitSize - 10}
-                    y={paddingOffset * unitSize - 10}
-                    width={svgWidth - (paddingOffset * 2) * unitSize + 20}
-                    height={svgHeight - (paddingOffset * 2) * unitSize + 20}
-                    fill={activeTheme.boardColor}
-                    rx={keyRoundness + 6}
-                    ry={keyRoundness + 6}
-                    stroke={activeTheme.boardColor}
-                    strokeWidth={4}
-                    opacity={0.85}
-                  />
-
-                  {/* Render Keys */}
-                  {activeKeys.map((key, idx) => {
-                    const rxVal = (key.rx + paddingOffset) * unitSize;
-                    const ryVal = (key.ry + paddingOffset) * unitSize;
-                    const xVal = (key.x + paddingOffset) * unitSize;
-                    const yVal = (key.y + paddingOffset) * unitSize;
-                    const wVal = key.w * unitSize;
-                    const hVal = key.h * unitSize;
-                    
-                    const isSelected = selectedKeyIdx === idx;
-                    const { fill, stroke, textColor } = getKeycapStyles(key, idx);
-                    
-                    // Determine legend: priority is Override -> Translated keycode -> Matrix coordinate
-                    const override = keyOverrides[idx] || {};
-                    let rawCode = key.keycode || "";
-                    let { label: translatedLabel, type: keyRole } = translateKeycode(rawCode);
-                    
-                    // Save inferred key role if not set
-                    if (!key.role) key.role = keyRole;
-                    
-                    let legend = override.label !== undefined ? override.label : translatedLabel;
-                    if (legend === "" && showMatrixCoords) {
-                      legend = key.label; // show coordinates if toggled and key is blank
-                    }
-                    
-                    const lines = legend.split('\n');
-                    
-                    return (
-                      <g
-                        key={idx}
-                        transform={key.r ? `rotate(${key.r}, ${rxVal}, ${ryVal})` : undefined}
-                        onClick={() => setSelectedKeyIdx(idx)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {/* Keycap Body Shadow */}
-                        <rect
-                          x={xVal + keySpacing / 2}
-                          y={yVal + keySpacing / 2 + 2}
-                          width={wVal - keySpacing}
-                          height={hVal - keySpacing}
-                          fill="rgba(0,0,0,0.15)"
-                          rx={keyRoundness}
-                          ry={keyRoundness}
-                        />
-                        
-                        {/* Keycap Outer Body */}
-                        <rect
-                          x={xVal + keySpacing / 2}
-                          y={yVal + keySpacing / 2}
-                          width={wVal - keySpacing}
-                          height={hVal - keySpacing}
-                          fill={fill}
-                          stroke={isSelected ? "#f59e0b" : stroke}
-                          strokeWidth={isSelected ? Math.max(borderWidth, 2.5) : borderWidth}
-                          rx={keyRoundness}
-                          ry={keyRoundness}
-                          style={{ transition: 'fill 0.2s ease, stroke 0.2s ease' }}
-                        />
-                        
-                        {/* Premium Inset Edge */}
-                        {keyRole !== "empty" && keyRole !== "trans" && (
-                          <rect
-                            x={xVal + keySpacing / 2 + 2}
-                            y={yVal + keySpacing / 2 + 1}
-                            width={wVal - keySpacing - 4}
-                            height={hVal - keySpacing - 3}
-                            fill="none"
-                            stroke="rgba(255, 255, 255, 0.12)"
-                            strokeWidth={1}
-                            rx={Math.max(0, keyRoundness - 2)}
-                            ry={Math.max(0, keyRoundness - 2)}
-                            pointerEvents="none"
-                          />
-                        )}
-
-                        {/* Text Legend */}
-                        <text
-                          x={xVal + wVal / 2}
-                          y={yVal + hVal / 2 + (lines.length > 1 ? -fontSize / 2 : fontSize / 3.5)}
-                          textAnchor="middle"
-                          fontSize={fontSize}
-                          fill={textColor}
-                          fontWeight="600"
-                          style={{ userSelect: 'none', pointerEvents: 'none' }}
-                        >
-                          {lines.map((line, lIdx) => (
-                            <tspan x={xVal + wVal / 2} dy={lIdx > 0 ? fontSize + 3 : 0} key={lIdx}>
-                              {line}
-                            </tspan>
-                          ))}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                  All
+                </button>
+                {mappedLayers.map((_, i) => (
+                  <button key={i}
+                    className={`layer-tab ${activeLayer === i ? 'active' : ''}`}
+                    onClick={() => setActiveLayer(i)}
+                  >
+                    {i}
+                  </button>
+                ))}
+                {hasExtras && (
+                  <button
+                    className={`layer-tab ${activeLayer === 'extras' ? 'active' : ''}`}
+                    onClick={() => setActiveLayer('extras')}
+                  >
+                    Combos & TD
+                  </button>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Quick Info & Help Bar */}
-          <div className="canvas-footer">
-            <div className="info-badge">
-              <span>Selected Preset:</span> <strong>{selectedPresetKey === "custom" ? "Custom File" : PRESETS[selectedPresetKey]?.name}</strong>
+              {/* Layer cards */}
+              {activeLayer !== 'extras' && layersToRender.map(idx => (
+                <div key={idx} className="glass-card layer-card-cheatsheet">
+                  <div className="layer-card-header">
+                    <span className="layer-number-badge">{idx}</span>
+                    <button className="btn btn-secondary btn-sm" onClick={() => downloadSVG(idx)}>
+                      ↓ SVG
+                    </button>
+                  </div>
+                  <div className="svg-container" style={{ background: theme.bg }}>
+                    {renderSVG(idx, mappedLayers[idx])}
+                  </div>
+                </div>
+              ))}
+
+              {/* Combos & Tap Dance section */}
+              {(activeLayer === null || activeLayer === 'extras') && hasExtras && (
+                <div className="extras-section">
+
+                  {/* Combos */}
+                  {combos.length > 0 && (
+                    <div className="glass-card panel extras-card">
+                      <h3>Combos</h3>
+                      <table className="extras-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Keys</th>
+                            <th>→ Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {combos.map(c => {
+                            const comboKeys = c.keys.map(comboKeyLabel).filter(Boolean);
+                            const action = translateKeycode(c.action).label || c.action;
+                            return (
+                              <tr key={c.idx}>
+                                <td className="extras-idx">{c.idx}</td>
+                                <td>
+                                  <span className="combo-keys">
+                                    {comboKeys.map((k, ki) => (
+                                      <React.Fragment key={ki}>
+                                        <span className="key-chip">{k}</span>
+                                        {ki < comboKeys.length - 1 && <span className="combo-plus">+</span>}
+                                      </React.Fragment>
+                                    ))}
+                                  </span>
+                                </td>
+                                <td><span className="key-chip key-chip-accent">{action}</span></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Tap Dances */}
+                  {tapDances.length > 0 && (
+                    <div className="glass-card panel extras-card">
+                      <h3>Tap Dance</h3>
+                      <table className="extras-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Tap</th>
+                            <th>Hold</th>
+                            <th>Double Tap</th>
+                            <th>Tap + Hold</th>
+                            <th>Term</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tapDances.map(td => {
+                            const fmt = k => k && k !== 'KC_NO'
+                              ? <span className="key-chip">{translateKeycode(k).label || k}</span>
+                              : <span className="td-empty">—</span>;
+                            return (
+                              <tr key={td.idx}>
+                                <td className="extras-idx">TD{td.idx}</td>
+                                <td>{fmt(td.tap)}</td>
+                                <td>{fmt(td.hold)}</td>
+                                <td>{fmt(td.doubleTap)}</td>
+                                <td>{fmt(td.tapHold)}</td>
+                                <td className="td-term">{td.term}ms</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="info-badge">
-              <span>Matrix Size:</span> <strong>{parsedMatrix.rows} × {parsedMatrix.cols}</strong>
-            </div>
-            {selectedKeyIdx !== null && (
-              <div className="info-badge highlight">
-                <span>Selected Key:</span> <strong>Coordinate ({selectedKeyInfo?.label})</strong>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Right Side: Options & Sidebar Controls */}
+        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <div className="sidebar-panels">
-          
-          {/* Panel 1: Presets & Layout Files */}
+
+          {/* Physical Layout */}
           <div className="glass-card panel">
-            <h3>Layout Template</h3>
+            <h3>Physical Layout</h3>
             <div className="form-group">
-              <label>Select Preset Layout</label>
-              <select 
-                value={selectedPresetKey} 
-                onChange={(e) => setSelectedPresetKey(e.target.value)}
-                className="select-input"
-              >
+              <label>Keyboard Preset</label>
+              <select value={selectedPreset} onChange={e => setSelectedPreset(e.target.value)} className="select-input">
+                <option value="split58">Split 58 (Lily58 / Sofle / Iris)</option>
                 <option value="corne">Corne (40% Split)</option>
-                <option value="ansi60">60% ANSI (Standard)</option>
-                <option value="custom" disabled={selectedPresetKey !== "custom"}>Uploaded Custom Layout</option>
+                <option value="ansi60">60% ANSI</option>
               </select>
             </div>
-            
-            {/* Layers tabs */}
-            {mappedLayers.length > 0 && (
-              <div className="form-group">
-                <label>Keymap Layer</label>
-                <div className="layer-tabs">
-                  {mappedLayers.map((_, idx) => (
-                    <button
-                      key={idx}
-                      className={`layer-tab ${activeLayer === idx ? 'active' : ''}`}
-                      onClick={() => {
-                        setActiveLayer(idx);
-                        setSelectedKeyIdx(null);
-                      }}
-                    >
-                      L{idx}
-                    </button>
-                  ))}
-                </div>
+            {fileName && (
+              <div className="info-badge" style={{ marginTop: 0 }}>
+                <span>File:</span> <strong>{fileName}</strong>
               </div>
             )}
           </div>
 
-          {/* Panel 2: Theme & Styling Panel */}
+          {/* Style */}
           <div className="glass-card panel">
-            <h3>Visual Style</h3>
+            <h3>Style</h3>
+
             <div className="form-group">
               <label>Color Theme</label>
               <div className="theme-grid">
-                {Object.values(THEMES).map((t) => (
-                  <button
-                    key={t.id}
-                    className={`theme-badge ${activeThemeId === t.id ? 'active' : ''}`}
+                {Object.values(THEMES).map(t => (
+                  <button key={t.id}
+                    className={`theme-badge ${themeId === t.id ? 'active' : ''}`}
                     style={{ background: t.bg, borderColor: t.keyAccent }}
-                    onClick={() => setActiveThemeId(t.id)}
-                    title={t.name}
+                    onClick={() => setThemeId(t.id)} title={t.name}
                   >
                     <span style={{ color: t.keyAlpha }}>●</span>
                     <span style={{ color: t.keyModifier }}>●</span>
@@ -665,158 +534,49 @@ const CheatsheetMaker = () => {
             </div>
 
             <div className="form-group">
-              <label>Font Family</label>
-              <select 
-                value={fontFamily} 
-                onChange={(e) => setFontFamily(e.target.value)}
-                className="select-input"
-              >
-                <option value="Inter">Inter (Sans-Serif)</option>
-                <option value="Outfit">Outfit (Clean Geometric)</option>
-                <option value="Fira Code">Fira Code (Developer)</option>
+              <label>Label Style</label>
+              <div className="layer-tabs">
+                {[['default', 'Full'], ['abbrev', 'Short'], ['emoji', 'Emoji']].map(([val, label]) => (
+                  <button key={val}
+                    className={`layer-tab ${labelMode === val ? 'active' : ''}`}
+                    onClick={() => setLabelMode(val)}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Font</label>
+              <select value={fontFamily} onChange={e => setFontFamily(e.target.value)} className="select-input">
+                <option value="Inter">Inter</option>
+                <option value="Outfit">Outfit</option>
+                <option value="Fira Code">Fira Code</option>
                 <option value="JetBrains Mono">JetBrains Mono</option>
-                <option value="Roboto">Roboto</option>
               </select>
             </div>
 
             <div className="sliders-grid">
               <div className="slider-item">
-                <label>Key Size ({unitSize}px)</label>
-                <input 
-                  type="range" min="35" max="85" value={unitSize} 
-                  onChange={(e) => setUnitSize(parseInt(e.target.value))} 
-                />
+                <label>Key size ({unitSize}px)</label>
+                <input type="range" min="30" max="72" value={unitSize} onChange={e => setUnitSize(+e.target.value)} />
               </div>
               <div className="slider-item">
-                <label>Gap ({keySpacing}px)</label>
-                <input 
-                  type="range" min="0" max="10" value={keySpacing} 
-                  onChange={(e) => setKeySpacing(parseInt(e.target.value))} 
-                />
+                <label>Gap ({keyGap}px)</label>
+                <input type="range" min="0" max="8" value={keyGap} onChange={e => setKeyGap(+e.target.value)} />
               </div>
               <div className="slider-item">
-                <label>Roundness ({keyRoundness}px)</label>
-                <input 
-                  type="range" min="0" max="20" value={keyRoundness} 
-                  onChange={(e) => setKeyRoundness(parseInt(e.target.value))} 
-                />
+                <label>Rounding ({radius}px)</label>
+                <input type="range" min="0" max="16" value={radius} onChange={e => setRadius(+e.target.value)} />
               </div>
               <div className="slider-item">
-                <label>Font Size ({fontSize}px)</label>
-                <input 
-                  type="range" min="8" max="22" value={fontSize} 
-                  onChange={(e) => setFontSize(parseInt(e.target.value))} 
-                />
+                <label>Font size ({fontSize}px)</label>
+                <input type="range" min="7" max="18" value={fontSize} onChange={e => setFontSize(+e.target.value)} />
               </div>
-            </div>
-
-            <div className="checkboxes-row">
-              <label className="checkbox-label">
-                <input 
-                  type="checkbox" checked={showMatrixCoords} 
-                  onChange={(e) => setShowMatrixCoords(e.target.checked)} 
-                />
-                Show coordinates when blank
-              </label>
             </div>
           </div>
-
-          {/* Panel 3: Interactive Key Editor */}
-          {selectedKeyIdx !== null && selectedKeyInfo && (
-            <div className="glass-card panel key-editor">
-              <div className="panel-title-row">
-                <h3>Edit Key ({selectedKeyInfo.label})</h3>
-                <button className="btn-close" onClick={() => setSelectedKeyIdx(null)}>×</button>
-              </div>
-
-              <div className="form-group">
-                <label>Key Legend (Supports \n for newline)</label>
-                <input
-                  type="text"
-                  value={selectedKeyOverride.label !== undefined ? selectedKeyOverride.label : (translateKeycode(selectedKeyInfo.keycode).label)}
-                  onChange={(e) => updateKeyOverride("label", e.target.value)}
-                  className="text-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Key Role/Type</label>
-                <select
-                  value={selectedKeyOverride.type || selectedKeyInfo.role || "alpha"}
-                  onChange={(e) => updateKeyOverride("type", e.target.value)}
-                  className="select-input"
-                >
-                  <option value="alpha">Alpha/Standard Key</option>
-                  <option value="modifier">Modifier Key</option>
-                  <option value="accent">Accent Key</option>
-                  <option value="trans">Transparent Key (▽)</option>
-                  <option value="empty">Empty/Deleted Key</option>
-                </select>
-              </div>
-
-              <div className="color-pickers-row">
-                <div className="form-group color-input-group">
-                  <label>Bg Override</label>
-                  <input
-                    type="color"
-                    value={selectedKeyOverride.color || getKeycapStyles(selectedKeyInfo, selectedKeyIdx).fill}
-                    onChange={(e) => updateKeyOverride("color", e.target.value)}
-                  />
-                </div>
-                <div className="form-group color-input-group">
-                  <label>Text Override</label>
-                  <input
-                    type="color"
-                    value={selectedKeyOverride.textColor || getKeycapStyles(selectedKeyInfo, selectedKeyIdx).textColor}
-                    onChange={(e) => updateKeyOverride("textColor", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="key-editor-actions">
-                <button className="btn btn-secondary btn-sm" onClick={resetSelectedKeyOverrides}>
-                  Reset Key
-                </button>
-                {Object.keys(keyOverrides).length > 0 && (
-                  <button className="btn btn-secondary btn-sm btn-danger" onClick={resetAllOverrides}>
-                    Clear All Overrides
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Panel 4: Export Panel */}
-          {parsedKeys.length > 0 && (
-            <div className="glass-card panel export-panel">
-              <h3>Export Options</h3>
-              <div className="checkboxes-row" style={{ marginBottom: '1rem' }}>
-                <label className="checkbox-label">
-                  <input 
-                    type="checkbox" checked={transparentBg} 
-                    onChange={(e) => setTransparentBg(e.target.checked)} 
-                  />
-                  Transparent background in exports
-                </label>
-              </div>
-              <div className="export-buttons-grid">
-                <button className="btn btn-primary" onClick={downloadSVG}>
-                  Download SVG
-                </button>
-                <button className="btn btn-secondary" onClick={downloadPNG}>
-                  Download PNG
-                </button>
-                <button className="btn btn-secondary" onClick={copySVGCode}>
-                  Copy SVG Code
-                </button>
-              </div>
-            </div>
-          )}
 
         </div>
       </div>
     </div>
   );
-};
-
-export default CheatsheetMaker;
+}

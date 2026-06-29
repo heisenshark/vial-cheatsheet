@@ -629,3 +629,172 @@
     transform: translateY(0);
   }
 }
+
+/* Layer filter tab bar */
+.layer-filter-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* Cheatsheet layer cards */
+.layer-card-cheatsheet {
+  margin-bottom: 1.5rem;
+}
+
+.layer-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.layer-card-header h3 {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+  font-size: 0.95rem;
+  color: var(--slate-400);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.layer-name-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.layer-name-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--slate-100);
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  outline: none;
+  padding: 0.1rem 0.25rem;
+  width: 160px;
+  transition: border-color 0.2s;
+}
+
+.layer-name-input:focus {
+  border-bottom-color: var(--amber-500);
+}
+
+.layer-name-input::placeholder {
+  color: var(--slate-600);
+  font-weight: 400;
+}
+
+/* Layer number badge (replaces editable name) */
+.layer-number-badge {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--amber-500);
+  letter-spacing: -1px;
+  line-height: 1;
+  min-width: 2rem;
+}
+
+/* Extras (combos / tap dance) */
+.extras-section {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.extras-card h3 {
+  margin-bottom: 1rem;
+}
+
+.extras-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.extras-table th {
+  text-align: left;
+  color: var(--slate-400);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.extras-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+
+.extras-table tr:last-child td {
+  border-bottom: none;
+}
+
+.extras-idx {
+  color: var(--slate-500);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.combo-keys {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.combo-plus {
+  color: var(--slate-500);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.key-chip {
+  display: inline-block;
+  background: var(--slate-800);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--slate-100);
+  white-space: nowrap;
+}
+
+.key-chip-accent {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--amber-500);
+}
+
+.td-empty {
+  color: var(--slate-600);
+}
+
+.td-term {
+  color: var(--slate-500);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: rgba(255,255,255,0.07);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: var(--slate-200);
+}
