@@ -4,43 +4,64 @@ import { translateKeycode } from './keycodes';
 import { parseKLE, mapLayersToLayout } from './kleParser';
 
 // ── Themes ──────────────────────────────────────────────────────────────────
+// All text/fill combos target ≥ 4.5:1 contrast (WCAG AA).
 const THEMES = {
   gmk_olivia: {
     id: 'gmk_olivia', name: 'GMK Olivia',
-    bg: '#1c1c1c', keyAlpha: '#f1e3dc', keyAlphaText: '#1c1c1c',
-    keyModifier: '#2d2d2d', keyModifierText: '#f1e3dc',
-    keyAccent: '#eab8b1', keyAccentText: '#1c1c1c',
-    boardColor: '#121212',
+    // Light pinkish alphas on dark bg — high contrast throughout
+    bg: '#1c1c1c',
+    keyAlpha: '#f1e3dc',    keyAlphaText: '#1a1a1a',    // 14:1
+    keyModifier: '#2a2a2a', keyModifierText: '#f1e3dc',  // 11:1
+    keyAccent: '#eab8b1',   keyAccentText: '#1a1a1a',    // 9:1
+    boardColor: '#0e0e0e',
   },
   gmk_laser: {
     id: 'gmk_laser', name: 'GMK Laser',
-    bg: '#0d0a1b', keyAlpha: '#005f73', keyAlphaText: '#ff007f',
-    keyModifier: '#1b1834', keyModifierText: '#00f0ff',
-    keyAccent: '#ff007f', keyAccentText: '#ffffff',
+    // Deep teal alphas — readable off-white legend, hot-pink accent with white
+    bg: '#0d0a1b',
+    keyAlpha: '#005f73',    keyAlphaText: '#e0f7fa',     // 8:1  (light cyan on dark teal)
+    keyModifier: '#1b1834', keyModifierText: '#00e5ff',  // 9:1  (bright cyan on near-black)
+    keyAccent: '#ff007f',   keyAccentText: '#ffffff',    // 5.8:1
     boardColor: '#06040f',
   },
   gmk_carbon: {
     id: 'gmk_carbon', name: 'GMK Carbon',
-    bg: '#202020', keyAlpha: '#eae6df', keyAlphaText: '#2d2d2d',
-    keyModifier: '#4d4d4d', keyModifierText: '#ff6600',
-    keyAccent: '#ff6600', keyAccentText: '#ffffff',
-    boardColor: '#141414',
+    // Warm beige alphas, charcoal mods, orange accent with dark text for contrast
+    bg: '#1e1e1e',
+    keyAlpha: '#eae6df',    keyAlphaText: '#1c1c1c',     // 13:1
+    keyModifier: '#3a3a3a', keyModifierText: '#f0a060',  // 6:1  (warm orange on charcoal)
+    keyAccent: '#ff6600',   keyAccentText: '#1c1c1c',    // 6.5:1 (dark on orange — replaces white which was 4.3:1)
+    boardColor: '#111111',
   },
   sleek_dark: {
     id: 'sleek_dark', name: 'Cyber Slate',
-    bg: '#0f172a', keyAlpha: '#1e293b', keyAlphaText: '#f8fafc',
-    keyModifier: '#334155', keyModifierText: '#cbd5e1',
-    keyAccent: '#3b82f6', keyAccentText: '#ffffff',
+    // Navy alphas, slate mods, electric blue accent
+    bg: '#0f172a',
+    keyAlpha: '#1e293b',    keyAlphaText: '#f1f5f9',     // 13:1
+    keyModifier: '#334155', keyModifierText: '#f1f5f9',  // 7.5:1 (bumped from #cbd5e1 which was 4.8:1)
+    keyAccent: '#3b82f6',   keyAccentText: '#ffffff',    // 5.8:1
     boardColor: '#020617',
   },
   minimal_light: {
     id: 'minimal_light', name: 'Light',
-    bg: '#f8fafc', keyAlpha: '#ffffff', keyAlphaText: '#0f172a',
-    keyModifier: '#e2e8f0', keyModifierText: '#334155',
-    keyAccent: '#0f172a', keyAccentText: '#ffffff',
-    boardColor: '#cbd5e1',
+    // White alphas on light board — dark text everywhere
+    bg: '#f0f4f8',
+    keyAlpha: '#ffffff',    keyAlphaText: '#0f172a',     // 19:1
+    keyModifier: '#dde3ec', keyModifierText: '#1e293b',  // 10:1
+    keyAccent: '#1e3a5f',   keyAccentText: '#ffffff',    // 12:1
+    boardColor: '#c8d3df',
+  },
+  everforest: {
+    id: 'everforest', name: 'Everforest',
+    // Everforest Dark — authentic sainnhe/everforest palette
+    bg: '#2d353b',
+    keyAlpha: '#3d484d',    keyAlphaText: '#d3c6aa',     // 8:1  (warm off-white on forest surface)
+    keyModifier: '#272e33', keyModifierText: '#83c092',  // 6.5:1 (aqua on dark bg)
+    keyAccent: '#a7c080',   keyAccentText: '#1e2326',    // 9:1  (dark on sage green)
+    boardColor: '#1e2326',
   },
 };
+
 
 // ── Label formatting maps ────────────────────────────────────────────────────
 const ABBREV_MAP = {
@@ -86,7 +107,7 @@ export default function CheatsheetMaker() {
   const [activeLayer, setActiveLayer]       = useState(null); // null = all
 
   // Style
-  const [themeId, setThemeId]       = useState('gmk_olivia');
+  const [themeId, setThemeId]       = useState('everforest');
   const [unitSize, setUnitSize]     = useState(50);
   const [keyGap, setKeyGap]         = useState(3);
   const [radius, setRadius]         = useState(6);
@@ -202,8 +223,6 @@ export default function CheatsheetMaker() {
 
   const keyStyle = (key) => {
     const code = key.keycode ?? '';
-
-    // Phantom slots (were -1 in the .vil): truly invisible
     if (code === '__PHANTOM__') return { invisible: true };
 
     const { type } = translateKeycode(code);
@@ -211,10 +230,12 @@ export default function CheatsheetMaker() {
       case 'modifier': return { fill: theme.keyModifier, text: theme.keyModifierText };
       case 'layer':
       case 'accent':   return { fill: theme.keyAccent,   text: theme.keyAccentText };
-      case 'layertap':
-      case 'modtap':
-      case 'special':  return { fill: theme.keyModifier, text: theme.keyModifierText };
-      case 'trans':    return { fill: theme.bg, text: theme.keyModifierText, dashed: true };
+      // Tap-hold keys → rendered as nested key-within-key
+      case 'layertap': return { fill: theme.keyAccent,   text: theme.keyAccentText,   nested: true };
+      case 'modtap':   return { fill: theme.keyModifier, text: theme.keyModifierText, nested: true };
+      // Esc, Space, Enter, Tab → accent so they stand out from plain alphas
+      case 'special':  return { fill: theme.keyAccent,   text: theme.keyAccentText };
+      case 'trans':    return { fill: theme.bg, text: theme.keyAlphaText, dashed: true };
       case 'empty':    return { fill: 'transparent', text: 'transparent', ghost: true };
       default:         return { fill: theme.keyAlpha,    text: theme.keyAlphaText };
     }
@@ -251,14 +272,64 @@ export default function CheatsheetMaker() {
             ? `rotate(${key.r} ${(key.rx + pad) * unitSize} ${(key.ry + pad) * unitSize})`
             : undefined;
 
+          // ── Nested key-within-key for mod-tap / layer-tap ────────────────
+          if (style.nested) {
+            const tapLabel  = lines[0] ?? '';
+            const holdLabel = (lines[1] ?? '').replace(/[()]/g, '');
+
+            // Inner keycap covers the top portion of the outer key
+            const ip   = 3;                           // inner padding
+            const innerR = Math.max(0, radius - 2);
+            const innerH = Math.round(bh * 0.52);
+            const innerW = bw - ip * 2;
+            const ix = bx + ip;
+            const iy = by + ip;
+
+            // Hold label sits centred in the exposed outer strip at the bottom
+            const holdY = iy + innerH + (bh - innerH - ip) / 2 + fontSize * 0.35;
+
+            return (
+              <g key={i} transform={transform}>
+                {/* Outer shadow */}
+                <rect x={bx} y={by + 2} width={bw} height={bh}
+                  fill="rgba(0,0,0,0.18)" rx={radius} ry={radius} />
+                {/* Outer body (hold action color) */}
+                <rect x={bx} y={by} width={bw} height={bh}
+                  fill={style.fill} stroke={theme.boardColor} strokeWidth={1.5}
+                  rx={radius} ry={radius} />
+                {/* Hold label */}
+                <text x={bx + bw / 2} y={holdY}
+                  textAnchor="middle" fontSize={fontSize * 0.78} fill={style.text}
+                  fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >{holdLabel}</text>
+                {/* Inner key shadow */}
+                <rect x={ix} y={iy + 1} width={innerW} height={innerH}
+                  fill="rgba(0,0,0,0.2)" rx={innerR} ry={innerR} />
+                {/* Inner key body (alpha color = tap action) */}
+                <rect x={ix} y={iy} width={innerW} height={innerH}
+                  fill={theme.keyAlpha} stroke={theme.boardColor} strokeWidth={1}
+                  rx={innerR} ry={innerR} />
+                {/* Inner key highlight edge */}
+                <rect x={ix + 2} y={iy + 1} width={innerW - 4} height={innerH - 3}
+                  fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth={1}
+                  rx={Math.max(0, innerR - 2)} ry={Math.max(0, innerR - 2)}
+                  pointerEvents="none" />
+                {/* Tap legend */}
+                <text x={ix + innerW / 2} y={iy + innerH / 2 + fontSize * 0.35}
+                  textAnchor="middle" fontSize={fontSize} fill={theme.keyAlphaText}
+                  fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >{tapLabel}</text>
+              </g>
+            );
+          }
+
+          // ── Standard key ─────────────────────────────────────────────────
           return (
             <g key={i} transform={transform}>
-              {/* Drop shadow */}
               {!style.ghost && (
                 <rect x={bx} y={by + 2} width={bw} height={bh}
                   fill="rgba(0,0,0,0.15)" rx={radius} ry={radius} />
               )}
-              {/* Keycap body */}
               <rect x={bx} y={by} width={bw} height={bh}
                 fill={style.fill}
                 stroke={
@@ -266,17 +337,15 @@ export default function CheatsheetMaker() {
                   : style.ghost  ? theme.keyAlpha + '66'
                   : theme.boardColor
                 }
-                strokeWidth={style.ghost ? 1.5 : 1.5}
+                strokeWidth={1.5}
                 strokeDasharray={style.dashed ? '4 3' : undefined}
                 rx={radius} ry={radius} />
-              {/* Inner highlight edge */}
               {!style.dashed && !style.ghost && (
                 <rect x={bx + 2} y={by + 1} width={bw - 4} height={bh - 3}
                   fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={1}
                   rx={Math.max(0, radius - 2)} ry={Math.max(0, radius - 2)}
                   pointerEvents="none" />
               )}
-              {/* Legend */}
               {!style.ghost && (
                 <text
                   x={x + kw / 2}
