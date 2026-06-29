@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import CheatsheetMaker from './CheatsheetMaker';
+import CheatsheetMaker from './components/CheatsheetMaker';
 
 function App() {
   return (
