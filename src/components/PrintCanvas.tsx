@@ -215,8 +215,11 @@ export function PrintCanvas({
   const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
   const my = Math.max(...parsedKeys.map(k => k.y + k.h));
   const kbW = (mx + CPAD * 2) * CPU, kbH = (my + CPAD * 2) * CPU;
+  // Exact A4 aspect ratio with 8mm margins:
+  // Portrait printable area: 194mm x 281mm. Base 1200 -> 1738.
+  // Landscape printable area: 281mm x 194mm. Base 1800 -> 1243.
   const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
-  const baseVH = printOrientation === 'landscape' ? 1270 : 1700;
+  const baseVH = printOrientation === 'landscape' ? 1240 : 1735;
   const VW = baseVW * printZoom;
   const VH = baseVH * printZoom;
   const arrows = buildCanvasArrows();
@@ -264,6 +267,13 @@ export function PrintCanvas({
             <circle cx="20" cy="20" r="1" fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.15)' : theme.keyAlpha + '22'} />
           </pattern>
           <rect x={-5000} y={-5000} width={15000} height={15000} fill="url(#dot-grid)" className="no-print" />
+
+          {/* Print Boundary Overlay */}
+          <rect x={viewOff.x + 20} y={viewOff.y + 20} width={VW - 40} height={VH - 40} 
+            fill="none" stroke="var(--amber-500)" strokeWidth="4" strokeDasharray="12,12" 
+            rx="8" className="no-print" style={{ pointerEvents: 'none', opacity: 0.5 }} />
+          <text x={viewOff.x + 30} y={viewOff.y + 45} fill="var(--amber-500)" fontSize="16" fontWeight="bold" 
+            className="no-print" style={{ pointerEvents: 'none', opacity: 0.7 }}>Print Boundary (A4 {printOrientation})</text>
 
           {/* Arrow shadows */}
           {!disableArrows && arrows.map((a, i) => (
