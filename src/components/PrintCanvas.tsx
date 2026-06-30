@@ -355,40 +355,48 @@ export function PrintCanvas({
             );
           })}
 
-          {/* Arrows */}
-          {!disableArrows && arrows.map((a, i) => (
-            <path key={`a${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
-              fill="none" stroke={a.color} strokeWidth={arrowWidth}
-              markerEnd={`url(#arrowhead-${a.color.replace('#','')})`} />
-          ))}
-
-          {/* Draggable Arrow Handles */}
+          {/* Arrows and Draggable Handles */}
           {!disableArrows && arrows.map((a, i) => {
             const isDraggingThis = svgDrag && svgDrag.type === 'arrowControl' && (svgDrag as any).arrowId === a.arrowId;
+            const splinePath = solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ]);
             return (
-              <g key={`ah${i}`} className="no-print">
-                {isDraggingThis && (
-                  <g style={{ pointerEvents: 'none' }} opacity={0.45}>
-                    <line x1={a.sx} y1={a.sy} x2={a.p0.x} y2={a.p0.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                    <line x1={a.p0.x} y1={a.p0.y} x2={a.p1.x} y2={a.p1.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                    <line x1={a.p1.x} y1={a.p1.y} x2={a.p2.x} y2={a.p2.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                    <line x1={a.p2.x} y1={a.p2.y} x2={a.ex} y2={a.ey} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+              <g key={`arrow-group-${i}`} className="arrow-interactive-group">
+                {/* Thick invisible hitbox to catch hover */}
+                <path d={splinePath} fill="none" stroke="transparent" strokeWidth={30} style={{ pointerEvents: 'stroke' }} className="no-print" />
+                
+                {/* The visible arrow */}
+                <path d={splinePath} fill="none" stroke={a.color} strokeWidth={arrowWidth} markerEnd={`url(#arrowhead-${a.color.replace('#','')})`} />
+                
+                {/* Draggable Arrow Handles */}
+                <g className="no-print">
+                  {isDraggingThis && (
+                    <g style={{ pointerEvents: 'none' }} opacity={0.45}>
+                      <line x1={a.sx} y1={a.sy} x2={a.p0.x} y2={a.p0.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+                      <line x1={a.p0.x} y1={a.p0.y} x2={a.p1.x} y2={a.p1.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+                      <line x1={a.p1.x} y1={a.p1.y} x2={a.p2.x} y2={a.p2.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+                      <line x1={a.p2.x} y1={a.p2.y} x2={a.ex} y2={a.ey} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+                    </g>
+                  )}
+                  
+                  {/* Middle point ALWAYS visible */}
+                  <circle cx={a.p1.x} cy={a.p1.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 1, a.p1.x, a.p1.y)} />
+                  <circle cx={a.p1.x} cy={a.p1.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                  {/* Secondary points (hidden unless hovered) */}
+                  <g className={`secondary-handle ${isDraggingThis ? 'dragging' : ''}`}>
+                    <circle cx={a.p0.x} cy={a.p0.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 0, a.p0.x, a.p0.y)} />
+                    <circle cx={a.p0.x} cy={a.p0.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                    <circle cx={a.p2.x} cy={a.p2.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, a.p2.x, a.p2.y)} />
+                    <circle cx={a.p2.x} cy={a.p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                    <circle cx={a.sx} cy={a.sy} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 3, a.sx, a.sy)} />
+                    <circle cx={a.sx} cy={a.sy} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                    <circle cx={a.ex} cy={a.ey} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 4, a.ex, a.ey)} />
+                    <circle cx={a.ex} cy={a.ey} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
                   </g>
-                )}
-                <circle cx={a.p0.x} cy={a.p0.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 0, a.p0.x, a.p0.y)} />
-                <circle cx={a.p0.x} cy={a.p0.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                <circle cx={a.p1.x} cy={a.p1.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 1, a.p1.x, a.p1.y)} />
-                <circle cx={a.p1.x} cy={a.p1.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                <circle cx={a.p2.x} cy={a.p2.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, a.p2.x, a.p2.y)} />
-                <circle cx={a.p2.x} cy={a.p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                <circle cx={a.sx} cy={a.sy} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 3, a.sx, a.sy)} />
-                <circle cx={a.sx} cy={a.sy} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                <circle cx={a.ex} cy={a.ey} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 4, a.ex, a.ey)} />
-                <circle cx={a.ex} cy={a.ey} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                </g>
               </g>
             );
           })}
