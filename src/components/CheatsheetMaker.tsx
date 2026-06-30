@@ -5,6 +5,7 @@ import { THEMES } from '../themes';
 import { comboKeyLabel } from '../utils';
 import type { ParsedKey, Theme, Combo, TapDance } from '../types';
 
+import { LayerSvg } from './LayerSvg';
 import { PrintCanvas } from './PrintCanvas';
 
 export default function CheatsheetMaker() {
@@ -17,6 +18,7 @@ export default function CheatsheetMaker() {
   const [showInfoPane, setShowInfoPane] = useState(true);
 
   const [selectedPreset, setSelectedPreset] = useState('split58');
+  const [activeLayer, setActiveLayer] = useState<number | 'extras' | null>(null);
   const [layerNames, setLayerNames] = useState<Record<number, string>>({});
   const [hiddenLayers, setHiddenLayers] = useState<Record<number, boolean>>({});
 
@@ -29,6 +31,7 @@ export default function CheatsheetMaker() {
   const [fontFamily, setFontFamily] = useState('Inter');
   const [labelMode, setLabelMode] = useState('abbrev');
 
+  const [printMode, setPrintMode] = useState(false);
   const [printOrientation, setPrintOrientation] = useState('landscape');
   const [printZoom, setPrintZoom] = useState(1.0);
   const [disableArrows, setDisableArrows] = useState(false);
@@ -147,6 +150,16 @@ export default function CheatsheetMaker() {
     reader.readAsText(file);
   };
 
+  const downloadSVG = (layerIdx: number) => {
+    const el = document.getElementById(`layer-svg-${layerIdx}`);
+    if (!el) return;
+    const src = '<?xml version="1.0" standalone="no">\n' + new XMLSerializer().serializeToString(el);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    a.download = `layer_${layerIdx}.svg`;
+    a.click();
+  };
+
   const downloadPrintSVG = () => {
     const el = document.getElementById('print-svg');
     if (!el) return;
@@ -167,6 +180,11 @@ export default function CheatsheetMaker() {
     }
   };
 
+  const layersToRender = (activeLayer === null
+    ? mappedLayers.map((_, i) => i)
+    : typeof activeLayer === 'number' ? [activeLayer] : [])
+    .filter(i => !hiddenLayers[i]);
+
   const hasExtras = combos.length > 0 || tapDances.length > 0;
 
   return (
@@ -180,7 +198,14 @@ export default function CheatsheetMaker() {
         </div>
         <div className="header-actions">
           {mappedLayers.length > 0 && (
-            <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Print Layout</button>
+            <>
+              <button className={`btn ${printMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPrintMode(p => !p)}>
+                {printMode ? '← Edit View' : '📄 Print Layout'}
+              </button>
+              {printMode && (
+                <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Print</button>
+              )}
+            </>
           )}
           <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>📂 Upload .vil File</button>
           <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json,.vil" onChange={e => handleFileInput(e.target.files?.[0])} />
@@ -202,7 +227,7 @@ export default function CheatsheetMaker() {
                 <p>Or click to browse — Vial backup files (.vil / .json) are supported</p>
               </div>
             </div>
-          ) : (
+          ) : printMode ? (
             <div className="print-layout-wrapper">
               <style>{`
                 @media print {
@@ -284,6 +309,109 @@ export default function CheatsheetMaker() {
                 setHiddenLayers={setHiddenLayers}
                 onRegisterControls={setCanvasControls}
               />
+            </div>
+          ) : (
+            <div>
+              <div className="layer-filter-bar">
+                <button className={`layer-tab ${activeLayer === null ? 'active' : ''}`} onClick={() => setActiveLayer(null)}>All</button>
+                {mappedLayers.map((_, i) => (
+                  <button key={i} className={`layer-tab ${activeLayer === i ? 'active' : ''}`} onClick={() => setActiveLayer(i)}>{i}</button>
+                ))}
+                {hasExtras && <button className={`layer-tab ${activeLayer === 'extras' ? 'active' : ''}`} onClick={() => setActiveLayer('extras')}>Extras</button>}
+              </div>
+
+              <div className="layer-list">
+                {layersToRender.map(i => (
+                  <div key={i} className="layer-card">
+                    <div className="layer-header">
+                      <h3>{layerNames[i] ?? `Layer ${i}`}</h3>
+                      <button className="btn btn-secondary btn-sm" onClick={() => downloadSVG(i)}>Download SVG</button>
+                    </div>
+                    <div className="layer-svg-container">
+                      <LayerSvg
+                        layerIdx={i}
+                        keys={adjustedMappedLayers[i]}
+                        theme={theme}
+                        unitSize={unitSize}
+                        keyGap={keyGap}
+                        radius={radius}
+                        fontSize={fontSize}
+                        fontFamily={fontFamily}
+                        labelMode={labelMode}
+                        colorLayerButtons={colorLayerButtons}
+                        arrowColors={ARROW_COLORS}
+                        mappedLayersLength={mappedLayers.length}
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                {activeLayer === 'extras' && (
+                  <div className="extras-section">
+                    {combos.length > 0 && (
+                      <div className="glass-card extras-card panel">
+                        <h3>Combos</h3>
+                        <table className="extras-table">
+                          <thead>
+                            <tr>
+                              <th>Keys</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {combos.map((c: Combo) => (
+                              <tr key={`c-${c.idx}`}>
+                                <td>
+                                  <div className="combo-keys">
+                                    {c.keys.filter(k => k && k !== 'KC_NO').map((k, idx, arr) => (
+                                      <React.Fragment key={idx}>
+                                        <span className="key-chip">{comboKeyLabel(k)}</span>
+                                        {idx < arr.length - 1 && <span className="combo-plus">+</span>}
+                                      </React.Fragment>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="key-chip key-chip-accent">{comboKeyLabel(c.action)}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {tapDances.length > 0 && (
+                      <div className="glass-card extras-card panel">
+                        <h3>Tap Dances</h3>
+                        <table className="extras-table">
+                          <thead>
+                            <tr>
+                              <th>Index</th>
+                              <th>Tap</th>
+                              <th>Hold</th>
+                              <th>Double Tap</th>
+                              <th>Tap+Hold</th>
+                              <th>Term</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tapDances.map((td: TapDance) => (
+                              <tr key={`td-${td.idx}`}>
+                                <td className="extras-idx">TD_{td.idx}</td>
+                                <td>{td.tap && td.tap !== 'KC_NO' ? <span className="key-chip">{comboKeyLabel(td.tap)}</span> : <span className="td-empty">—</span>}</td>
+                                <td>{td.hold && td.hold !== 'KC_NO' ? <span className="key-chip">{comboKeyLabel(td.hold)}</span> : <span className="td-empty">—</span>}</td>
+                                <td>{td.doubleTap && td.doubleTap !== 'KC_NO' ? <span className="key-chip">{comboKeyLabel(td.doubleTap)}</span> : <span className="td-empty">—</span>}</td>
+                                <td>{td.tapHold && td.tapHold !== 'KC_NO' ? <span className="key-chip">{comboKeyLabel(td.tapHold)}</span> : <span className="td-empty">—</span>}</td>
+                                <td className="td-term">{td.term ? `${td.term}ms` : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
