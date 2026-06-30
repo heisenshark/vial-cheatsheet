@@ -61,7 +61,7 @@ export function PrintCanvas({
   const {
     layerPositions,
     arrowMidpoints,
-    setArrowMidpoints,
+    resetArrows,
     hiddenLayers,
     viewOff,
     svgDrag,
@@ -273,7 +273,7 @@ export function PrintCanvas({
             🔍 Fit to Page
           </button>
           {Object.keys(arrowMidpoints).length > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setArrowMidpoints({})} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => resetArrows()} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }} title="Reset all arrow curves to their default calculated positions">
               🔄 Reset Arrows
             </button>
           )}

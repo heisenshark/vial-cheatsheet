@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ParsedKey, DragState, SnapGuide, Point } from '../types';
 
+interface HistoryState {
+  layerPositions: Record<number, Point>;
+  arrowMidpoints: Record<string, Point[]>;
+  hiddenLayers: Record<number, boolean>;
+}
+
 export function useCanvasInteractions(
   mappedLayers: any[],
   parsedKeys: ParsedKey[],
@@ -17,8 +23,20 @@ export function useCanvasInteractions(
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   
+  const [history, setHistory] = useState({ stack: [] as HistoryState[], index: -1 });
+  const stateRef = useRef<HistoryState>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {} });
+  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers };
+  
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragCTM = useRef<DOMMatrix | null>(null);
+
+  const commitHistory = useCallback((newState: HistoryState) => {
+    setHistory(prev => {
+      const newStack = prev.stack.slice(0, prev.index + 1);
+      newStack.push(JSON.parse(JSON.stringify(newState)));
+      return { stack: newStack, index: newStack.length - 1 };
+    });
+  }, []);
 
   // Initialize positions
   useEffect(() => {
@@ -36,6 +54,10 @@ export function useCanvasInteractions(
     });
     setLayerPos(pos);
     setViewOff({ x: -40, y: -40 });
+    
+    // Initialize history
+    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {} };
+    setHistory({ stack: [initialState], index: 0 });
   }, [mappedLayers, parsedKeys, unitSize]);
 
   const fitVisibleToPage = useCallback(() => {
@@ -110,6 +132,43 @@ export function useCanvasInteractions(
     svg.addEventListener('wheel', handleWheel, { passive: false });
     return () => svg.removeEventListener('wheel', handleWheel);
   }, [setPrintZoom]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            setHistory(prev => {
+              if (prev.index < prev.stack.length - 1) {
+                const nextIndex = prev.index + 1;
+                const state = prev.stack[nextIndex];
+                setLayerPos(state.layerPositions);
+                setArrowMidpoints(state.arrowMidpoints);
+                setHiddenLayers(state.hiddenLayers);
+                return { ...prev, index: nextIndex };
+              }
+              return prev;
+            });
+          } else {
+            setHistory(prev => {
+              if (prev.index > 0) {
+                const nextIndex = prev.index - 1;
+                const state = prev.stack[nextIndex];
+                setLayerPos(state.layerPositions);
+                setArrowMidpoints(state.arrowMidpoints);
+                setHiddenLayers(state.hiddenLayers);
+                return { ...prev, index: nextIndex };
+              }
+              return prev;
+            });
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const toSVG = (e: React.MouseEvent | MouseEvent): Point => {
     const svg = svgRef.current;
@@ -189,19 +248,29 @@ export function useCanvasInteractions(
   };
 
   const onSVGUp = () => {
+    if (svgDrag && (svgDrag.type === 'layer' || svgDrag.type === 'arrowControl')) {
+      commitHistory(stateRef.current);
+    }
     setSvgDrag(null);
     setSnapGuides([]);
     dragCTM.current = null;
   };
 
   const toggleLayerVisibility = (idx: number) => {
-    setHiddenLayers(prev => ({ ...prev, [idx]: !prev[idx] }));
+    const nextHidden = { ...stateRef.current.hiddenLayers, [idx]: !stateRef.current.hiddenLayers[idx] };
+    setHiddenLayers(nextHidden);
+    commitHistory({ ...stateRef.current, hiddenLayers: nextHidden });
+  };
+
+  const resetArrows = () => {
+    setArrowMidpoints({});
+    commitHistory({ ...stateRef.current, arrowMidpoints: {} });
   };
 
   return {
     layerPositions,
     arrowMidpoints,
-    setArrowMidpoints,
+    resetArrows,
     hiddenLayers,
     viewOff,
     svgDrag,
