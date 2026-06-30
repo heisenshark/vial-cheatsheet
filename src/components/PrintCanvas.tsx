@@ -86,7 +86,7 @@ export function PrintCanvas({
     onSVGUp,
     toggleLayerVisibility,
     fitVisibleToPage
-  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane);
+  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances);
 
   const CPU = unitSize;
   const CPG = keyGap;

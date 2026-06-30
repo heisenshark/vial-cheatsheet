@@ -16,7 +16,9 @@ export function useCanvasInteractions(
   printOrientation: string,
   printZoom: number,
   setPrintZoom: React.Dispatch<React.SetStateAction<number>>,
-  showInfoPane: boolean
+  showInfoPane: boolean,
+  combos?: any[],
+  tapDances?: any[]
 ) {
   const [layerPositions, setLayerPos] = useState<Record<number, Point>>({});
   const [arrowMidpoints, setArrowMidpoints] = useState<Record<string, Point[]>>({});
@@ -92,10 +94,13 @@ export function useCanvasInteractions(
     });
 
     if (showInfoPane) {
+      const cLen = combos ? combos.length : 0;
+      const tdLen = tapDances ? tapDances.length : 0;
+      const paneHeight = 36 + 32 + 90 + (cLen > 0 ? 31 + cLen * 32 : 0) + (tdLen > 0 ? 31 + tdLen * 32 : 0);
       minX = Math.min(minX, ipp.x);
       minY = Math.min(minY, ipp.y);
-      maxX = Math.max(maxX, ipp.x + 360);
-      maxY = Math.max(maxY, ipp.y + 700);
+      maxX = Math.max(maxX, ipp.x + 340);
+      maxY = Math.max(maxY, ipp.y + paneHeight);
       hasVisible = true;
     }
     
@@ -118,7 +123,7 @@ export function useCanvasInteractions(
     const centerX = minX + contentW / 2;
     const centerY = minY + contentH / 2;
     setViewOff({ x: centerX - VW / 2, y: centerY - VH / 2 });
-  }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane]);
+  }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane, combos, tapDances]);
 
   useEffect(() => {
     fitVisibleToPage();
