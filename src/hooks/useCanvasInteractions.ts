@@ -165,6 +165,35 @@ export function useCanvasInteractions(
     });
   }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane, combos, tapDances, commitHistory]);
 
+  const gridLayoutVisibleLayers = useCallback((columns: number, gapX: number, gapY: number) => {
+    if (!parsedKeys.length || !mappedLayers.length) return;
+    const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
+    const my = Math.max(...parsedKeys.map(k => k.y + k.h));
+    const CPU = unitSize;
+    const CPAD = 0.5;
+    const CLABEL = Math.max(28, 12 + 12);
+    const kbW = (mx + CPAD * 2) * CPU;
+    const kbH = (my + CPAD * 2) * CPU + CLABEL;
+    
+    const { layerPositions: lp, hiddenLayers: hl } = stateRef.current;
+    
+    const visibleIdxs = mappedLayers.map((_, i) => i).filter(i => !hl[i]);
+    if (visibleIdxs.length === 0) return;
+    
+    const newPos = { ...lp };
+    visibleIdxs.forEach((idx, i) => {
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+      newPos[idx] = {
+        x: 20 + col * (kbW + gapX),
+        y: 20 + row * (kbH + gapY)
+      };
+    });
+    
+    setLayerPos(newPos);
+    commitHistory({ ...stateRef.current, layerPositions: newPos });
+  }, [parsedKeys, mappedLayers, unitSize, commitHistory]);
+
   useEffect(() => {
     fitVisibleToPage();
   }, [printOrientation, fitVisibleToPage]);
@@ -426,6 +455,7 @@ export function useCanvasInteractions(
     onSVGMove,
     onSVGUp,
     toggleLayerVisibility,
-    fitVisibleToPage
+    fitVisibleToPage,
+    gridLayoutVisibleLayers
   };
 }

@@ -104,7 +104,8 @@ export function PrintCanvas({
     onSVGMove,
     onSVGUp,
     toggleLayerVisibility,
-    fitVisibleToPage
+    fitVisibleToPage,
+    gridLayoutVisibleLayers
   } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances, hiddenLayers, setHiddenLayers);
 
   useEffect(() => {
@@ -112,10 +113,11 @@ export function PrintCanvas({
       hiddenLayers,
       toggleLayerVisibility,
       fitToPage: fitVisibleToPage,
+      gridLayout: gridLayoutVisibleLayers,
       resetArrows,
       canResetArrows: Object.keys(arrowMidpoints).length > 0
     });
-  }, [hiddenLayers, toggleLayerVisibility, fitVisibleToPage, resetArrows, arrowMidpoints, onRegisterControls]);
+  }, [hiddenLayers, toggleLayerVisibility, fitVisibleToPage, gridLayoutVisibleLayers, resetArrows, arrowMidpoints, onRegisterControls]);
 
   const CPU = unitSize;
   const CPG = keyGap;

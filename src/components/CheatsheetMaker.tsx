@@ -44,7 +44,13 @@ export default function CheatsheetMaker() {
     fitToPage: () => void;
     resetArrows: () => void;
     canResetArrows: boolean;
+    gridLayout: (cols: number, gapX: number, gapY: number) => void;
   } | null>(null);
+  
+  // Grid layout state
+  const [gridCols, setGridCols] = useState(2);
+  const [gridGapX, setGridGapX] = useState(80);
+  const [gridGapY, setGridGapY] = useState(60);
   
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
     layers: false,
@@ -363,6 +369,36 @@ export default function CheatsheetMaker() {
             </div>
             {!collapsedPanels.layers && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                {canvasControls?.gridLayout && (
+                  <div style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--slate-300)', marginBottom: '8px' }}>Auto Grid Layout</div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Columns</label>
+                        <input type="number" value={gridCols} onChange={e => setGridCols(parseInt(e.target.value) || 1)} min="1" 
+                          style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap X</label>
+                        <input type="number" value={gridGapX} onChange={e => setGridGapX(parseInt(e.target.value) || 0)} 
+                          style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap Y</label>
+                        <input type="number" value={gridGapY} onChange={e => setGridGapY(parseInt(e.target.value) || 0)} 
+                          style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
+                      </div>
+                    </div>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}
+                      onClick={() => canvasControls.gridLayout(gridCols, gridGapX, gridGapY)}
+                    >
+                      Apply Grid Layout
+                    </button>
+                  </div>
+                )}
+                <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
                 {mappedLayers.map((_, i) => {
                   const isVisible = !hiddenLayers[i];
                   const layerColor = ARROW_COLORS[i % 8];
