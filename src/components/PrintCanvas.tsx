@@ -202,7 +202,7 @@ export function PrintCanvas({
         arrows.push({
           arrowId, fromLayer, toLayer: to,
           sx, sy, ex, ey, p0, p1, p2,
-          color: theme.id === 'mono_print' ? '#000000' : arrowColors[to % 8]
+          color: (theme.id === 'mono_print' && !colorLayerButtons) ? '#000000' : arrowColors[to % 8]
         });
         gIdx++;
       });
@@ -293,11 +293,11 @@ export function PrintCanvas({
               >
                 {isActive && theme.id !== 'mono_print' && <rect x={2} y={2} width={kbW} height={kbH + CLABEL} fill="rgba(0,0,0,0.35)" rx={CPR + 4} />}
                 <rect x={0} y={0} width={kbW} height={CLABEL}
-                  fill={theme.id === 'mono_print' ? '#ffffff' : theme.boardColor} rx={CPR + 2}
-                  stroke={theme.id === 'mono_print' ? '#000000' : (isActive ? arrowColors[layerIdx % 8] : 'transparent')} strokeWidth={1.5} />
+                  fill={colorLayerButtons ? arrowColors[layerIdx % 8] : (theme.id === 'mono_print' ? '#ffffff' : theme.boardColor)} rx={CPR + 2}
+                  stroke={theme.id === 'mono_print' && !colorLayerButtons ? '#000000' : (isActive && !colorLayerButtons ? arrowColors[layerIdx % 8] : 'transparent')} strokeWidth={1.5} />
                 <text x={kbW / 2} y={CLABEL * 0.68}
                   textAnchor="middle" fontSize={13} fontWeight="800"
-                  fill={theme.id === 'mono_print' ? '#000000' : arrowColors[layerIdx % 8]} style={{ userSelect: 'none', pointerEvents: 'none' }}
+                  fill={colorLayerButtons ? '#121212' : (theme.id === 'mono_print' ? '#000000' : arrowColors[layerIdx % 8])} style={{ userSelect: 'none', pointerEvents: 'none' }}
                 >Layer {layerIdx}</text>
                 
                 <g className="no-print" style={{ cursor: 'pointer' }}
