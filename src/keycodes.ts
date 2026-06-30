@@ -118,6 +118,11 @@ export function translateKeycode(code) {
   // Check if code is in the direct translation map
   if (KEY_MAP[cleanCode] !== undefined) {
     const label = KEY_MAP[cleanCode];
+    let altLabel = SHIFT_MAP[cleanCode];
+    if (cleanCode === "KC_GESC" || cleanCode === "KC_ESC" || cleanCode === "KC_ESCAPE") {
+      altLabel = "~";
+    }
+    
     let type = "alpha";
     if (["Ctrl", "Shift", "Alt", "GUI", "Caps"].includes(label)) {
       type = "modifier";
@@ -128,14 +133,14 @@ export function translateKeycode(code) {
     } else if (label === "▽") {
       type = "trans";
     }
-    return { label, type };
+    return { label, altLabel, type };
   }
 
   // 1. Shifted keys wrapper: LSFT(KC_1) -> !
   const shiftRegex = /^LSFT\(([^)]+)\)$/;
   const shiftMatch = cleanCode.match(shiftRegex);
   if (shiftMatch) {
-    const subCode = shiftMatch[1];
+    const subCode = shiftMatch[1].trim();
     if (SHIFT_MAP[subCode] !== undefined) {
       return { label: SHIFT_MAP[subCode], type: "alpha" };
     }
@@ -159,10 +164,11 @@ export function translateKeycode(code) {
   const layerTapMatch = cleanCode.match(layerTapRegex);
   if (layerTapMatch) {
     const layerNum = layerTapMatch[1];
-    const baseCode = layerTapMatch[2];
-    const baseTranslated = translateKeycode(baseCode).label;
+    const baseCode = layerTapMatch[2].trim();
+    const translated = translateKeycode(baseCode);
     return {
-      label: `${baseTranslated}\n(L${layerNum})`,
+      label: `${translated.label}\n(L${layerNum})`,
+      altLabel: translated.altLabel,
       type: "layertap"
     };
   }
@@ -172,10 +178,11 @@ export function translateKeycode(code) {
   const vialLayerTapMatch = cleanCode.match(vialLayerTapRegex);
   if (vialLayerTapMatch) {
     const layerNum = vialLayerTapMatch[1];
-    const baseCode = vialLayerTapMatch[2];
-    const baseTranslated = translateKeycode(baseCode).label;
+    const baseCode = vialLayerTapMatch[2].trim();
+    const translated = translateKeycode(baseCode);
     return {
-      label: `${baseTranslated}\n(L${layerNum})`,
+      label: `${translated.label}\n(L${layerNum})`,
+      altLabel: translated.altLabel,
       type: "layertap"
     };
   }
@@ -185,15 +192,16 @@ export function translateKeycode(code) {
   const modTapMatch = cleanCode.match(modTapRegex);
   if (modTapMatch) {
     const mod = modTapMatch[1].replace("MOD_", "");
-    const baseCode = modTapMatch[2];
-    const baseTranslated = translateKeycode(baseCode).label;
+    const baseCode = modTapMatch[2].trim();
+    const translated = translateKeycode(baseCode);
     let shortMod = mod;
     if (mod === "LCTL" || mod === "RCTL") shortMod = "Ctrl";
     if (mod === "LSFT" || mod === "RSFT") shortMod = "Shift";
     if (mod === "LALT" || mod === "RALT") shortMod = "Alt";
     if (mod === "LGUI" || mod === "RGUI") shortMod = "GUI";
     return {
-      label: `${baseTranslated}\n(${shortMod})`,
+      label: `${translated.label}\n(${shortMod})`,
+      altLabel: translated.altLabel,
       type: "modtap"
     };
   }
@@ -203,15 +211,16 @@ export function translateKeycode(code) {
   const mtMatch = cleanCode.match(mtRegex);
   if (mtMatch) {
     const mod = mtMatch[1].replace("MOD_", "");
-    const baseCode = mtMatch[2];
-    const baseTranslated = translateKeycode(baseCode).label;
+    const baseCode = mtMatch[2].trim();
+    const translated = translateKeycode(baseCode);
     let shortMod = mod;
     if (mod.includes("CTL")) shortMod = "Ctrl";
     if (mod.includes("SFT")) shortMod = "Shift";
     if (mod.includes("ALT")) shortMod = "Alt";
     if (mod.includes("GUI")) shortMod = "GUI";
     return {
-      label: `${baseTranslated}\n(${shortMod})`,
+      label: `${translated.label}\n(${shortMod})`,
+      altLabel: translated.altLabel,
       type: "modtap"
     };
   }

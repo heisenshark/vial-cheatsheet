@@ -139,7 +139,7 @@ export function PrintCanvas({
       const x = (key.x + CPAD) * CPU + offX, y = (key.y + CPAD) * CPU + offY;
       const kw = key.w * CPU, kh = key.h * CPU;
       const bx = x + CPG / 2, by = y + CPG / 2, bw = kw - CPG, bh = kh - CPG;
-      const { label } = translateKeycode(key.keycode ?? '');
+      const { label, altLabel } = translateKeycode(key.keycode ?? '');
       const lines = (formatLabel(label, labelMode) ?? '').split('\n');
       const tr = key.r ? `rotate(${key.r} ${(key.rx! + CPAD) * CPU + offX} ${(key.ry! + CPAD) * CPU + offY})` : undefined;
       
@@ -154,7 +154,14 @@ export function PrintCanvas({
             <text x={bx + bw / 2} y={hy} textAnchor="middle" fontSize={CPF * 0.78} fill={style.text} fontWeight="700" style={{ userSelect: 'none' }}>{hold}</text>
             {theme.id !== 'mono_print' && <rect x={ix} y={iy + 1} width={iw} height={ih} fill="rgba(0,0,0,0.15)" rx={ir} />}
             <rect x={ix} y={iy} width={iw} height={ih} fill={theme.keyAlpha} stroke={theme.boardColor} strokeWidth={0.75} rx={ir} />
-            <text x={ix + iw / 2} y={iy + ih / 2 + CPF * 0.35} textAnchor="middle" fontSize={CPF} fill={theme.keyAlphaText} fontWeight="700" style={{ userSelect: 'none' }}>{tap}</text>
+            {altLabel ? (
+              <>
+                <text x={ix + iw / 2} y={iy + ih * 0.45} textAnchor="middle" fontSize={CPF * 0.75} fill={theme.keyAlphaText} fontWeight="700" style={{ userSelect: 'none' }}>{altLabel}</text>
+                <text x={ix + iw / 2} y={iy + ih * 0.85} textAnchor="middle" fontSize={CPF * 0.9} fill={theme.keyAlphaText} fontWeight="700" style={{ userSelect: 'none' }}>{tap}</text>
+              </>
+            ) : (
+              <text x={ix + iw / 2} y={iy + ih / 2 + CPF * 0.35} textAnchor="middle" fontSize={CPF} fill={theme.keyAlphaText} fontWeight="700" style={{ userSelect: 'none' }}>{tap}</text>
+            )}
           </g>
         );
       }
@@ -166,10 +173,17 @@ export function PrintCanvas({
             stroke={(style as any).ghost ? theme.keyAlpha + '66' : (style as any).dashed ? theme.keyModifierText + '44' : theme.boardColor}
             strokeWidth={1} strokeDasharray={(style as any).dashed ? '3 2' : (style as any).ghost ? '2 2' : undefined} rx={CPR} />
           {!(style as any).ghost && (
-            <text x={x + kw / 2} y={y + kh / 2 + (lines.length > 1 ? -CPF / 2 : CPF / 3.5)}
-              textAnchor="middle" fontSize={CPF} fill={style.text} fontWeight="600" style={{ userSelect: 'none' }}>
-              {lines.map((ln, li) => <tspan key={li} x={x + kw / 2} dy={li > 0 ? CPF + 1.5 : 0}>{ln}</tspan>)}
-            </text>
+            altLabel ? (
+              <text textAnchor="middle" fill={style.text} fontWeight="600" style={{ userSelect: 'none' }}>
+                <tspan x={x + kw / 2} y={y + kh * 0.4} fontSize={CPF * 0.75}>{altLabel}</tspan>
+                <tspan x={x + kw / 2} y={y + kh * 0.75} fontSize={CPF}>{lines[0]}</tspan>
+              </text>
+            ) : (
+              <text x={x + kw / 2} y={y + kh / 2 + (lines.length > 1 ? -CPF / 2 : CPF / 3.5)}
+                textAnchor="middle" fontSize={CPF} fill={style.text} fontWeight="600" style={{ userSelect: 'none' }}>
+                {lines.map((ln, li) => <tspan key={li} x={x + kw / 2} dy={li > 0 ? CPF + 1.5 : 0}>{ln}</tspan>)}
+              </text>
+            )
           )}
         </g>
       );
@@ -190,7 +204,7 @@ export function PrintCanvas({
       const lCy = lp.y + (kbH + CLABEL) / 2;
 
       layer.forEach(k => {
-        const to = getTargetLayer(k.action, mappedLayers.length);
+        const to = getTargetLayer(k.keycode, mappedLayers.length);
         if (to === null || to === layerIdx || hiddenLayers[to]) return;
 
         const tp = layerPositions[to];
@@ -198,18 +212,26 @@ export function PrintCanvas({
         const tCx = tp.x + kbW / 2;
         const tCy = tp.y + (kbH + CLABEL) / 2;
 
+        const kCx = lp.x + (k.x + CPAD + k.w / 2) * CPU;
+        const kCy = lp.y + (k.y + CPAD + k.h / 2) * CPU + CLABEL;
+        const kW = k.w * CPU;
+        const kH = k.h * CPU;
+
+        const tkCx = tp.x + (k.x + CPAD + k.w / 2) * CPU;
+        const tkCy = tp.y + (k.y + CPAD + k.h / 2) * CPU + CLABEL;
+
         const arrowId = `${layerIdx}-to-${to}`;
         const custom = arrowMidpoints[arrowId];
 
-        // Start: snap to nearest edge of origin layer box
-        const startAimX = (custom && custom[3]) ? custom[3].x : tCx;
-        const startAimY = (custom && custom[3]) ? custom[3].y : tCy;
-        const startPt = getBoxIntersection(lCx, lCy, kbW, kbH + CLABEL, startAimX, startAimY);
+        // Start: snap to nearest edge of the KEY box on origin layer
+        const startAimX = (custom && custom[3]) ? custom[3].x : tkCx;
+        const startAimY = (custom && custom[3]) ? custom[3].y : tkCy;
+        const startPt = getBoxIntersection(kCx, kCy, kW, kH, startAimX, startAimY);
         const sx = startPt.x, sy = startPt.y;
 
         // End: snap to nearest edge of target layer box
-        const endAimX = (custom && custom[4]) ? custom[4].x : lCx;
-        const endAimY = (custom && custom[4]) ? custom[4].y : lCy;
+        const endAimX = (custom && custom[4]) ? custom[4].x : kCx;
+        const endAimY = (custom && custom[4]) ? custom[4].y : kCy;
         const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAimX, endAimY);
         const ex = endPt.x, ey = endPt.y;
 
@@ -450,25 +472,29 @@ export function PrintCanvas({
             if (hiddenLayers[layerIdx]) return null;
             const p = layerPositions[layerIdx] || { x: 0, y: 0 };
             const isActive = svgDrag?.type === 'layer' && (svgDrag as any).layerIdx === layerIdx;
+            const titleStr = layerNames[layerIdx] ?? `Layer ${layerIdx}`;
+            const titleW = Math.max(140, titleStr.length * 8 + 50);
+            const titleX = kbW / 2 - titleW / 2;
+
             return (
               <g key={layerIdx} transform={`translate(${p.x},${p.y})`}
                 onMouseDown={e => onLayerDown(e, layerIdx)}
                 style={{ cursor: isDraggingLayer && isActive ? 'grabbing' : 'grab' }}
               >
                 {isActive && theme.id !== 'mono_print' && <rect x={2} y={2} width={kbW} height={kbH + CLABEL} fill="rgba(0,0,0,0.35)" rx={CPR + 4} />}
-                <rect x={0} y={0} width={kbW} height={CLABEL}
+                <rect x={titleX} y={0} width={titleW} height={CLABEL}
                   fill={colorLayerButtons ? arrowColors[layerIdx % 8] : (theme.id === 'mono_print' ? '#ffffff' : theme.boardColor)} rx={CPR + 2}
                   stroke={theme.id === 'mono_print' && !colorLayerButtons ? '#000000' : (isActive && !colorLayerButtons ? arrowColors[layerIdx % 8] : 'transparent')} strokeWidth={1.5} />
                 <text x={kbW / 2} y={CLABEL * 0.68}
                   textAnchor="middle" fontSize={13} fontWeight="800"
                   fill={colorLayerButtons ? '#121212' : (theme.id === 'mono_print' ? '#000000' : arrowColors[layerIdx % 8])} style={{ userSelect: 'none', pointerEvents: 'none' }}
-                >{layerNames[layerIdx] ?? `Layer ${layerIdx}`}</text>
+                >{titleStr}</text>
                 
                 <g className="no-print" style={{ cursor: 'pointer' }}
                   onMouseDown={e => { e.stopPropagation(); toggleLayerVisibility(layerIdx); }}
                 >
-                  <circle cx={kbW - 14} cy={CLABEL / 2} r={8} fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)'} />
-                  <text x={kbW - 14} y={CLABEL / 2 + 3} textAnchor="middle" fontSize={10} fill={theme.id === 'mono_print' ? '#000000' : '#ffffff'} fontWeight="bold" style={{ userSelect: 'none' }}>×</text>
+                  <circle cx={titleX + titleW - 14} cy={CLABEL / 2} r={8} fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)'} />
+                  <text x={titleX + titleW - 14} y={CLABEL / 2 + 3} textAnchor="middle" fontSize={10} fill={theme.id === 'mono_print' ? '#000000' : '#ffffff'} fontWeight="bold" style={{ userSelect: 'none' }}>×</text>
                 </g>
 
                 <rect x={CPAD * CPU - 6} y={CLABEL + CPAD * CPU - 6}

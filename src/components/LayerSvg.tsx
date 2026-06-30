@@ -97,7 +97,7 @@ export function LayerSvg({
         const bx = x + keyGap / 2, by = y + keyGap / 2;
         const bw = kw - keyGap,    bh = kh - keyGap;
 
-        const { label } = translateKeycode(key.keycode ?? '');
+        const { label, altLabel } = translateKeycode(key.keycode ?? '');
         const formatted = formatLabel(label, labelMode);
         const lines = (formatted ?? '').split('\n');
 
@@ -144,10 +144,23 @@ export function LayerSvg({
                   rx={Math.max(0, innerR - 2)} ry={Math.max(0, innerR - 2)}
                   pointerEvents="none" />
               )}
-              <text x={ix + innerW / 2} y={iy + innerH / 2 + fontSize * 0.35}
-                textAnchor="middle" fontSize={fontSize} fill={theme.keyAlphaText}
-                fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
-              >{tapLabel}</text>
+              {altLabel ? (
+                <>
+                  <text x={ix + innerW / 2} y={iy + innerH * 0.45}
+                    textAnchor="middle" fontSize={fontSize * 0.75} fill={theme.keyAlphaText}
+                    fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                  >{altLabel}</text>
+                  <text x={ix + innerW / 2} y={iy + innerH * 0.85}
+                    textAnchor="middle" fontSize={fontSize * 0.9} fill={theme.keyAlphaText}
+                    fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                  >{tapLabel}</text>
+                </>
+              ) : (
+                <text x={ix + innerW / 2} y={iy + innerH / 2 + fontSize * 0.35}
+                  textAnchor="middle" fontSize={fontSize} fill={theme.keyAlphaText}
+                  fontWeight="700" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >{tapLabel}</text>
+              )}
             </g>
           );
         }
@@ -175,16 +188,26 @@ export function LayerSvg({
                 pointerEvents="none" />
             )}
             {!(style as any).ghost && (
-              <text
-                x={x + kw / 2}
-                y={y + kh / 2 + (lines.length > 1 ? -fontSize / 2 : fontSize / 3.5)}
-                textAnchor="middle" fontSize={fontSize} fill={style.text}
-                fontWeight="600" style={{ userSelect: 'none', pointerEvents: 'none' }}
-              >
-                {lines.map((ln, li) => (
-                  <tspan key={li} x={x + kw / 2} dy={li > 0 ? fontSize + 2 : 0}>{ln}</tspan>
-                ))}
-              </text>
+              altLabel ? (
+                <text
+                  textAnchor="middle" fill={style.text}
+                  fontWeight="600" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >
+                  <tspan x={x + kw / 2} y={y + kh * 0.4} fontSize={fontSize * 0.75}>{altLabel}</tspan>
+                  <tspan x={x + kw / 2} y={y + kh * 0.75} fontSize={fontSize}>{lines[0]}</tspan>
+                </text>
+              ) : (
+                <text
+                  x={x + kw / 2}
+                  y={y + kh / 2 + (lines.length > 1 ? -fontSize / 2 : fontSize / 3.5)}
+                  textAnchor="middle" fontSize={fontSize} fill={style.text}
+                  fontWeight="600" style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >
+                  {lines.map((ln, li) => (
+                    <tspan key={li} x={x + kw / 2} dy={li > 0 ? fontSize + 2 : 0}>{ln}</tspan>
+                  ))}
+                </text>
+              )
             )}
           </g>
         );

@@ -25,6 +25,7 @@ export default function CheatsheetMaker() {
   const [themeId, setThemeId] = useState('everforest');
   const unitSize = 50; // Constant keycap size
   const [keyGap, setKeyGap] = useState(3);
+  const [splitGap, setSplitGap] = useState(0);
   const [radius, setRadius] = useState(6);
   const [fontSize, setFontSize] = useState(12);
   const [fontFamily, setFontFamily] = useState('Inter');
@@ -34,7 +35,7 @@ export default function CheatsheetMaker() {
   const [printOrientation, setPrintOrientation] = useState('landscape');
   const [printZoom, setPrintZoom] = useState(1.0);
   const [disableArrows, setDisableArrows] = useState(false);
-  const [colorLayerButtons, setColorLayerButtons] = useState(false);
+  const [colorLayerButtons, setColorLayerButtons] = useState(true);
   const [arrowWidth, setArrowWidth] = useState(2.5);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -64,6 +65,20 @@ export default function CheatsheetMaker() {
     if (!preset) return;
     setParsedKeys(parseKLE(preset.keymap));
   }, [selectedPreset]);
+
+  const { adjustedParsedKeys, adjustedMappedLayers } = React.useMemo(() => {
+    if (splitGap === 0 || parsedKeys.length === 0) return { adjustedParsedKeys: parsedKeys, adjustedMappedLayers: mappedLayers };
+    const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
+    const midX = mx / 2;
+    const adjustKey = (k: ParsedKey) => {
+      if (k.x >= midX) return { ...k, x: k.x + splitGap };
+      return k;
+    };
+    return {
+      adjustedParsedKeys: parsedKeys.map(adjustKey),
+      adjustedMappedLayers: mappedLayers.map(layer => layer.map(adjustKey))
+    };
+  }, [parsedKeys, mappedLayers, splitGap]);
 
   const showToast = (type: string, msg: string) => {
     setToast({ type, msg });
@@ -265,8 +280,8 @@ export default function CheatsheetMaker() {
               </div>
 
               <PrintCanvas
-                mappedLayers={mappedLayers}
-                parsedKeys={parsedKeys}
+                mappedLayers={adjustedMappedLayers}
+                parsedKeys={adjustedParsedKeys}
                 theme={theme}
                 unitSize={unitSize}
                 keyGap={keyGap}
@@ -315,7 +330,7 @@ export default function CheatsheetMaker() {
                     <div className="layer-svg-container">
                       <LayerSvg
                         layerIdx={i}
-                        keys={mappedLayers[i]}
+                        keys={adjustedMappedLayers[i]}
                         theme={theme}
                         unitSize={unitSize}
                         keyGap={keyGap}
@@ -530,6 +545,10 @@ export default function CheatsheetMaker() {
               <div className="slider-item">
                 <label>Gap: {keyGap}px</label>
                 <input type="range" min="0" max="10" value={keyGap} onChange={e => setKeyGap(Number(e.target.value))} />
+              </div>
+              <div className="slider-item">
+                <label>Split Gap: {splitGap.toFixed(1)}</label>
+                <input type="range" min="-5" max="5" step="0.1" value={splitGap} onChange={e => setSplitGap(Number(e.target.value))} />
               </div>
               <div className="slider-item">
                 <label>Border Radius: {radius}px</label>
