@@ -28,9 +28,10 @@ export default function CheatsheetMaker() {
 
   const [printMode, setPrintMode] = useState(false);
   const [printOrientation, setPrintOrientation] = useState('landscape');
-  const [printZoom, setPrintZoom] = useState(1);
+  const [printZoom, setPrintZoom] = useState(1.0);
   const [disableArrows, setDisableArrows] = useState(false);
-  const [colorLayerButtons, setColorLayerButtons] = useState(true);
+  const [colorLayerButtons, setColorLayerButtons] = useState(false);
+  const [arrowWidth, setArrowWidth] = useState(2.5);
 
   const [isDragging, setIsDragging] = useState(false);
   const [toast, setToast] = useState<{ type: string; msg: string } | null>(null);
@@ -223,6 +224,13 @@ export default function CheatsheetMaker() {
                   <button className="btn btn-secondary" onClick={() => setPrintZoom(z => Math.min(5.0, z + 0.1))} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>➕</button>
                 </div>
 
+                <div className="print-toolbar-group sliders-grid" style={{ minWidth: '150px', marginTop: 0 }}>
+                  <div className="slider-item" style={{ gap: '0.15rem' }}>
+                    <label style={{ color: 'var(--slate-400)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Arrow Width: {arrowWidth}px</label>
+                    <input type="range" min="1" max="8" step="0.5" value={arrowWidth} onChange={e => setArrowWidth(Number(e.target.value))} />
+                  </div>
+                </div>
+
                 <div className="print-toolbar-group">
                   <button className="btn btn-secondary" onClick={downloadPrintSVG} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>💾 Download SVG</button>
                   <button className="btn btn-primary" onClick={() => window.print()} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>🖨️ Print / PDF</button>
@@ -247,6 +255,7 @@ export default function CheatsheetMaker() {
                 disableArrows={disableArrows}
                 setDisableArrows={setDisableArrows}
                 setColorLayerButtons={setColorLayerButtons}
+                arrowWidth={arrowWidth}
               />
             </div>
           ) : (

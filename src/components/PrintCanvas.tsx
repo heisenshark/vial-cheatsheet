@@ -22,6 +22,22 @@ interface PrintCanvasProps {
   disableArrows: boolean;
   setDisableArrows: React.Dispatch<React.SetStateAction<boolean>>;
   setColorLayerButtons: React.Dispatch<React.SetStateAction<boolean>>;
+  arrowWidth: number;
+}
+
+function getBoxIntersection(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Point {
+  const dx = tx - cx;
+  const dy = ty - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const scaleX = dx !== 0 ? Math.abs((w / 2) / dx) : Infinity;
+  const scaleY = dy !== 0 ? Math.abs((h / 2) / dy) : Infinity;
+  const scale = Math.min(scaleX, scaleY);
+  // Cap the scale to not overshoot the target
+  const clampedScale = Math.min(scale, 1);
+  return {
+    x: cx + dx * clampedScale,
+    y: cy + dy * clampedScale
+  };
 }
 
 export function PrintCanvas({
@@ -39,7 +55,8 @@ export function PrintCanvas({
   printOrientation,
   printZoom,
   setPrintZoom,
-  disableArrows
+  disableArrows,
+  arrowWidth
 }: PrintCanvasProps) {
   const {
     layerPositions,
@@ -160,18 +177,30 @@ export function PrintCanvas({
         if (hiddenLayers[to]) return;
         
         const fp = layerPositions[fromLayer], tp = layerPositions[to];
-        const sx = fp.x + (key.x + CPAD) * CPU + key.w * CPU / 2;
-        const sy = fp.y + CLABEL + (key.y + CPAD) * CPU + key.h * CPU / 2;
-        const ex = tp.x + kbW / 2;
-        const ey = tp.y + CLABEL * 0.4;
+        const cx = fp.x + (key.x + CPAD) * CPU + key.w * CPU / 2;
+        const cy = fp.y + CLABEL + (key.y + CPAD) * CPU + key.h * CPU / 2;
+        
+        const tCx = tp.x + kbW / 2;
+        const tCy = tp.y + (kbH + CLABEL) / 2;
+
+        const arrowId = `${fromLayer}-${keyIndex}`;
+        const custom = arrowMidpoints[arrowId];
+
+        const startTarget = (custom && custom[3]) ? custom[3] : { x: tCx, y: tCy };
+        const endTarget = (custom && custom[4]) ? custom[4] : { x: cx, y: cy };
+
+        const startPoint = getBoxIntersection(cx, cy, key.w * CPU, key.h * CPU, startTarget.x, startTarget.y);
+        const endPoint = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endTarget.x, endTarget.y);
+
+        const sx = startPoint.x;
+        const sy = startPoint.y;
+        const ex = endPoint.x;
+        const ey = endPoint.y;
 
         const dx = ex - sx, dy = ey - sy, len = Math.sqrt(dx * dx + dy * dy) || 1;
         const px = -dy / len, py = dx / len;
         const spread = (gIdx % 7 - 3) * 14;
         const arcH = 50 + (gIdx % 5) * 18;
-
-        const arrowId = `${fromLayer}-${keyIndex}`;
-        const custom = arrowMidpoints[arrowId];
 
         const c1x = sx + dx * 0.25 + px * (spread + arcH * 0.3);
         const c1y = sy + dy * 0.25 + py * (spread + arcH * 0.3);
@@ -268,6 +297,14 @@ export function PrintCanvas({
           </pattern>
           <rect x={-5000} y={-5000} width={15000} height={15000} fill="url(#dot-grid)" className="no-print" />
 
+          <defs>
+            {Array.from(new Set(arrows.map(a => a.color))).map(c => (
+              <marker key={c} id={`arrowhead-${c.replace('#','')}`} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L6,3 z" fill={c} />
+              </marker>
+            ))}
+          </defs>
+
           {/* Print Boundary Overlay */}
           <rect x={viewOff.x + 20} y={viewOff.y + 20} width={VW - 40} height={VH - 40} 
             fill="none" stroke="var(--amber-500)" strokeWidth="4" strokeDasharray="12,12" 
@@ -278,7 +315,7 @@ export function PrintCanvas({
           {/* Arrow shadows */}
           {!disableArrows && arrows.map((a, i) => (
             <path key={`as${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
-              fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth={3} className="no-print" />
+              fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth={arrowWidth + 1} className="no-print" />
           ))}
 
           {/* Layer keyboards */}
@@ -320,12 +357,9 @@ export function PrintCanvas({
 
           {/* Arrows */}
           {!disableArrows && arrows.map((a, i) => (
-            <g key={`a${i}`} style={{ pointerEvents: 'none' }}>
-              <path d={solveCatmullRom([{ x: a.sx, y: a.sy }, a.p0, a.p1, a.p2, { x: a.ex, y: a.ey }])}
-                fill="none" stroke={a.color} strokeWidth={1.8} strokeDasharray="6 3" opacity={0.9} />
-              <circle cx={a.ex} cy={a.ey} r={4} fill={a.color} />
-              <circle cx={a.sx} cy={a.sy} r={2.5} fill={a.color} opacity={0.7} />
-            </g>
+            <path key={`a${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
+              fill="none" stroke={a.color} strokeWidth={arrowWidth}
+              markerEnd={`url(#arrowhead-${a.color.replace('#','')})`} />
           ))}
 
           {/* Draggable Arrow Handles */}
@@ -349,6 +383,12 @@ export function PrintCanvas({
 
                 <circle cx={a.p2.x} cy={a.p2.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, a.p2.x, a.p2.y)} />
                 <circle cx={a.p2.x} cy={a.p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                <circle cx={a.sx} cy={a.sy} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 3, a.sx, a.sy)} />
+                <circle cx={a.sx} cy={a.sy} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+
+                <circle cx={a.ex} cy={a.ey} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 4, a.ex, a.ey)} />
+                <circle cx={a.ex} cy={a.ey} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
               </g>
             );
           })}
