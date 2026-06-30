@@ -255,7 +255,7 @@ export default function CheatsheetMaker() {
 
                   <label className="checkbox-label">
                     <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} />
-                    <span>Color Layer Triggers</span>
+                    <span>Color Coded Layers</span>
                   </label>
                 </div>
 
