@@ -48,8 +48,16 @@ export function solveCatmullRom(pts) {
 }
 
 export function getTargetLayer(code, numLayers) {
-  if (!code || typeof code !== 'string') return null;
-  const m = code.match(/(?:MO|TO|TG|TT|DF|OSL|LT|LT\d*)\(?(\d+)/);
+  if (code == null) return null;
+  let codeStr = '';
+  if (typeof code === 'number') {
+    codeStr = translateKeycode(code).label || '';
+  } else if (typeof code === 'string') {
+    codeStr = code;
+  } else {
+    return null;
+  }
+  const m = codeStr.match(/(?:MO|TO|TG|TT|DF|OSL|LT|LT\d*)\(?(\d+)/);
   if (!m) return null;
   const n = parseInt(m[1]);
   return n < numLayers ? n : null;

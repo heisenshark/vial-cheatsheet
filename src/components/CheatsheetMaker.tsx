@@ -15,7 +15,7 @@ export default function CheatsheetMaker() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [tapDances, setTapDances] = useState<TapDance[]>([]);
   const [layoutInfo, setLayoutInfo] = useState<any>({ name: 'Default' });
-  const [showInfoPane, setShowInfoPane] = useState(false);
+  const [showInfoPane, setShowInfoPane] = useState(true);
 
   const [selectedPreset, setSelectedPreset] = useState('split58');
   const [activeLayer, setActiveLayer] = useState<number | 'extras' | null>(null);
@@ -28,7 +28,7 @@ export default function CheatsheetMaker() {
   const [radius, setRadius] = useState(6);
   const [fontSize, setFontSize] = useState(12);
   const [fontFamily, setFontFamily] = useState('Inter');
-  const [labelMode, setLabelMode] = useState('default');
+  const [labelMode, setLabelMode] = useState('abbrev');
 
   const [printMode, setPrintMode] = useState(false);
   const [printOrientation, setPrintOrientation] = useState('landscape');
@@ -47,7 +47,7 @@ export default function CheatsheetMaker() {
   const [sidebarLayersCollapsed, setSidebarLayersCollapsed] = useState(false);
 
   const theme: Theme = (THEMES as any)[themeId];
-  const ARROW_COLORS = ['#a7c080','#83c092','#7fbbb3','#d699b6','#dbbc7f','#e69875','#e67e80','#9da9a0'];
+  const ARROW_COLORS = ['#a7c080', '#83c092', '#7fbbb3', '#d699b6', '#dbbc7f', '#e69875', '#e67e80', '#9da9a0'];
 
   useEffect(() => {
     if (!document.getElementById('gf-cheatsheet')) {
@@ -222,7 +222,7 @@ export default function CheatsheetMaker() {
                   }
                 }
               `}</style>
-              
+
               <div className="print-toolbar no-print">
                 <div className="print-toolbar-group">
                   <span className="print-toolbar-label">A4 Layout:</span>
@@ -237,7 +237,7 @@ export default function CheatsheetMaker() {
                     <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} />
                     <span>Show Arrows</span>
                   </label>
-                  
+
                   <label className="checkbox-label">
                     <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} />
                     <span>Color Layer Triggers</span>
@@ -330,7 +330,7 @@ export default function CheatsheetMaker() {
                     </div>
                   </div>
                 ))}
-                
+
                 {activeLayer === 'extras' && (
                   <div className="extras-section">
                     {combos.length > 0 && (
@@ -403,7 +403,7 @@ export default function CheatsheetMaker() {
 
         {/* ── Sidebar Tools ── */}
         <aside className="sidebar-panels no-print">
-          
+
           <div className="glass-card panel">
             <h3>Physical Layout</h3>
             <div className="form-group">
@@ -436,8 +436,8 @@ export default function CheatsheetMaker() {
                           checked={isVisible}
                           onChange={() => toggleLayerVisibility(i)}
                         />
-                        <span 
-                          className="toggle-slider" 
+                        <span
+                          className="toggle-slider"
                           style={{
                             backgroundColor: isVisible ? layerColor : undefined,
                             borderColor: isVisible ? layerColor : undefined
@@ -463,12 +463,9 @@ export default function CheatsheetMaker() {
                     </div>
                   );
                 })}
-                
+
                 {showInfoPane !== undefined && (
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#fff', userSelect: 'none', fontWeight: 600 }}>
-                      Info Pane
-                    </span>
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <label className="toggle-switch">
                       <input
                         type="checkbox"
@@ -477,6 +474,9 @@ export default function CheatsheetMaker() {
                       />
                       <span className="toggle-slider"></span>
                     </label>
+                    <span style={{ fontSize: '0.85rem', color: '#fff', userSelect: 'none', fontWeight: 600 }}>
+                      Info Pane
+                    </span>
                   </div>
                 )}
               </div>

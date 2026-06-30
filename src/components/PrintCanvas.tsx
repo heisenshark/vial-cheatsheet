@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useCanvasInteractions } from '../hooks/useCanvasInteractions';
 import { translateKeycode } from '../keycodes';
 import { formatLabel, solveCatmullRom, getTargetLayer } from '../utils';
@@ -175,119 +175,150 @@ export function PrintCanvas({
       );
     });
 
-  const buildCanvasArrows = (paneKeyPositions: Record<string, {x: number, y: number, w: number, h: number}> = {}) => {
+  const buildCanvasArrows = () => {
     if (!parsedKeys.length || !mappedLayers.length) return [];
     const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
     const my = Math.max(...parsedKeys.map(k => k.y + k.h));
     const kbW = (mx + CPAD * 2) * CPU, kbH = (my + CPAD * 2) * CPU;
 
-    const boxes: Record<number, { x1: number, y1: number, x2: number, y2: number }> = {};
-    mappedLayers.forEach((_, i) => {
-      const p = layerPositions[i] || { x: 0, y: 0 };
-      boxes[i] = { x1: p.x, y1: p.y, x2: p.x + kbW, y2: p.y + kbH + CLABEL };
-    });
+    const arrows: any[] = [];
 
-    const arrows: any[] = []; let gIdx = 0;
-    mappedLayers.forEach((_, fromLayer) => {
-      if (hiddenLayers[fromLayer]) return;
-      (mappedLayers[fromLayer] || []).forEach((key, keyIndex) => {
-        const to = getTargetLayer(key.keycode ?? '', mappedLayers.length);
-        if (to === null || to === fromLayer || !layerPositions[to] || !layerPositions[fromLayer]) return;
-        if (hiddenLayers[to]) return;
-        
-        const fp = layerPositions[fromLayer], tp = layerPositions[to];
-        const cx = fp.x + (key.x + CPAD) * CPU + key.w * CPU / 2;
-        const cy = fp.y + CLABEL + (key.y + CPAD) * CPU + key.h * CPU / 2;
-        
+    mappedLayers.forEach((layer, layerIdx) => {
+      if (hiddenLayers[layerIdx]) return;
+      const lp = layerPositions[layerIdx] || { x: 0, y: 0 };
+      const lCx = lp.x + kbW / 2;
+      const lCy = lp.y + (kbH + CLABEL) / 2;
+
+      layer.forEach(k => {
+        const to = getTargetLayer(k.action, mappedLayers.length);
+        if (to === null || to === layerIdx || hiddenLayers[to]) return;
+
+        const tp = layerPositions[to];
+        if (!tp) return;
         const tCx = tp.x + kbW / 2;
         const tCy = tp.y + (kbH + CLABEL) / 2;
 
-        const arrowId = `${fromLayer}-${keyIndex}`;
+        const arrowId = `${layerIdx}-to-${to}`;
         const custom = arrowMidpoints[arrowId];
 
-        const startTarget = (custom && custom[3]) ? custom[3] : { x: tCx, y: tCy };
-        const endTarget = (custom && custom[4]) ? custom[4] : { x: cx, y: cy };
+        // Start: snap to nearest edge of origin layer box
+        const startAimX = (custom && custom[3]) ? custom[3].x : tCx;
+        const startAimY = (custom && custom[3]) ? custom[3].y : tCy;
+        const startPt = getBoxIntersection(lCx, lCy, kbW, kbH + CLABEL, startAimX, startAimY);
+        const sx = startPt.x, sy = startPt.y;
 
-        const startPoint = getBoxIntersection(cx, cy, key.w * CPU, key.h * CPU, startTarget.x, startTarget.y);
-        const endPoint = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endTarget.x, endTarget.y);
+        // End: snap to nearest edge of target layer box
+        const endAimX = (custom && custom[4]) ? custom[4].x : lCx;
+        const endAimY = (custom && custom[4]) ? custom[4].y : lCy;
+        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAimX, endAimY);
+        const ex = endPt.x, ey = endPt.y;
 
-        const sx = startPoint.x;
-        const sy = startPoint.y;
-        const ex = endPoint.x;
-        const ey = endPoint.y;
-
-        const dx = ex - sx, dy = ey - sy, len = Math.sqrt(dx * dx + dy * dy) || 1;
-        const px = -dy / len, py = dx / len;
-        const spread = (gIdx % 7 - 3) * 14;
-        const arcH = 50 + (gIdx % 5) * 18;
-
-        const c1x = sx + dx * 0.25 + px * (spread + arcH * 0.3);
-        const c1y = sy + dy * 0.25 + py * (spread + arcH * 0.3);
-        const c2x = ex - dx * 0.25 + px * (spread + arcH * 0.2);
-        const c2y = ey - dy * 0.25 + py * (spread + arcH * 0.2);
-        let mx2 = (c1x + c2x) / 2, my2 = (c1y + c2y) / 2;
-
-        Object.entries(boxes).forEach(([bi, b]) => {
-          if (+bi === fromLayer || +bi === to) return;
-          if (mx2 > b.x1 && mx2 < b.x2 && my2 > b.y1 && my2 < b.y2) {
-            const dists = [
-              { d: mx2 - b.x1, dir: 'left' }, { d: b.x2 - mx2, dir: 'right' },
-              { d: my2 - b.y1, dir: 'top' }, { d: b.y2 - my2, dir: 'bottom' },
-            ];
-            const { d, dir } = dists.reduce((a, v) => v.d < a.d ? v : a);
-            const push = d + 30;
-            if (dir === 'left') { mx2 -= push; }
-            if (dir === 'right') { mx2 += push; }
-            if (dir === 'top') { my2 -= push; }
-            if (dir === 'bottom') { my2 += push; }
-          }
-        });
+        const dx = ex - sx, dy = ey - sy;
+        const c1x = sx + dx * 0.25, c1y = sy + dy * 0.25;
+        const c2x = ex - dx * 0.25, c2y = ey - dy * 0.25;
+        const mx2 = (c1x + c2x) / 2, my2 = (c1y + c2y) / 2;
 
         const p0 = (custom && custom[0]) ? custom[0] : { x: c1x, y: c1y };
         const p1 = (custom && custom[1]) ? custom[1] : { x: mx2, y: my2 };
         const p2 = (custom && custom[2]) ? custom[2] : { x: c2x, y: c2y };
 
         arrows.push({
-          arrowId, fromLayer, toLayer: to,
+          arrowId, fromLayer: layerIdx, toLayer: to,
           sx, sy, ex, ey, p0, p1, p2,
           color: (theme.id === 'mono_print' && !colorLayerButtons) ? '#000000' : arrowColors[to % 8]
         });
-        gIdx++;
       });
     });
 
-    if (showInfoPane) {
+    // Add info pane target layer arrows mathematically
+    if (showInfoPane && layoutInfo) {
       const paneW = 340;
-      const paneH = 36; // just header height — arrow comes from top of pane
+      const paneH = 600; // estimated height
       const paneCx = infoPanePos.x + paneW / 2;
       const paneCy = infoPanePos.y + paneH / 2;
 
-      // Collect unique target layers from combos and tap dances
+      // Calculate mathematical positions for target keycaps inside the Info Pane
+      const computedPanePositions: Record<string, {x: number, y: number, w: number, h: number}> = {};
+      const headerH = 38;
+      const contentPad = 16;
+      const metadataH = 93;
+      const blockGap = 16;
+      const subHeaderH = 31;
+      const rowH = 32; // 26px keycap + 6px gap
+      
+      let currentY = headerH + contentPad; // starts at 54
+      currentY += metadataH + blockGap; // now at 163
+      
+      if (combos.length > 0) {
+        const comboStartY = currentY + subHeaderH; // 194
+        combos.forEach((c, idx) => {
+          const target = getTargetLayer(c.action, mappedLayers.length);
+          if (target != null) {
+            const arrowId = `pane-to-${target}`;
+            const keyCenterY = comboStartY + idx * rowH + 13;
+            computedPanePositions[arrowId] = {
+              x: infoPanePos.x + 298, // center X of right keycap
+              y: infoPanePos.y + keyCenterY,
+              w: 52,
+              h: 26
+            };
+          }
+        });
+        currentY += subHeaderH + combos.length * rowH - 6 + blockGap;
+      }
+      
+      if (tapDances.length > 0) {
+        const tdStartY = currentY + subHeaderH;
+        tapDances.forEach((td, idx) => {
+          const tapTarget = getTargetLayer(td.tap, mappedLayers.length);
+          const holdTarget = getTargetLayer(td.hold, mappedLayers.length);
+          const keyCenterY = tdStartY + idx * rowH + 13;
+          
+          if (tapTarget != null) {
+            const arrowId = `pane-to-${tapTarget}`;
+            computedPanePositions[arrowId] = {
+              x: infoPanePos.x + 75, // center X of left keycap
+              y: infoPanePos.y + keyCenterY,
+              w: 52,
+              h: 26
+            };
+          }
+          if (holdTarget != null) {
+            const arrowId = `pane-to-${holdTarget}`;
+            computedPanePositions[arrowId] = {
+              x: infoPanePos.x + 298, // center X of right keycap
+              y: infoPanePos.y + keyCenterY,
+              w: 52,
+              h: 26
+            };
+          }
+        });
+      }
+
+      // Build the arrows for each unique active layer target
       const targetLayers = new Set<number>();
       combos.forEach(c => {
         const to = getTargetLayer(c.action, mappedLayers.length);
-        if (to !== null && layerPositions[to] && !hiddenLayers[to]) targetLayers.add(to);
+        if (to !== null && !hiddenLayers[to]) targetLayers.add(to);
       });
       tapDances.forEach(td => {
-        [td.tap, td.hold].forEach(action => {
-          const to = getTargetLayer(action, mappedLayers.length);
-          if (to !== null && layerPositions[to] && !hiddenLayers[to]) targetLayers.add(to);
-        });
+        const toT = getTargetLayer(td.tap, mappedLayers.length);
+        if (toT !== null && !hiddenLayers[toT]) targetLayers.add(toT);
+        const toH = getTargetLayer(td.hold, mappedLayers.length);
+        if (toH !== null && !hiddenLayers[toH]) targetLayers.add(toH);
       });
 
       targetLayers.forEach(to => {
         const arrowId = `pane-to-${to}`;
         const tp = layerPositions[to];
+        if (!tp) return;
         const tCx = tp.x + kbW / 2;
         const tCy = tp.y + (kbH + CLABEL) / 2;
 
         const custom = arrowMidpoints[arrowId];
-
-        // Start is clamped to keycap edge: drag position used as direction, projected onto box boundary
-        const measured = paneKeyPositions[arrowId];
+        const measured = computedPanePositions[arrowId];
         let sx: number, sy: number;
         if (measured) {
-          // Use custom[3] as direction target if dragged, else aim toward target layer
           const aimed = (custom && custom[3]) ? custom[3] : { x: tCx, y: tCy };
           const edge = getBoxIntersection(measured.x, measured.y, measured.w, measured.h, aimed.x, aimed.y);
           sx = edge.x;
@@ -328,7 +359,6 @@ export function PrintCanvas({
   const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
   const my = Math.max(...parsedKeys.map(k => k.y + k.h));
   const kbW = (mx + CPAD * 2) * CPU, kbH = (my + CPAD * 2) * CPU;
-  // Exact A4 aspect ratio with 8mm margins:
   // Portrait printable area: 194mm x 281mm. Base 1200 -> 1738.
   // Landscape printable area: 281mm x 194mm. Base 1800 -> 1243.
   const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
@@ -337,47 +367,9 @@ export function PrintCanvas({
   const VH = baseVH * printZoom;
   const isDraggingLayer = svgDrag?.type === 'layer';
 
-  // Measure actual SVG-space positions of layer-trigger keycaps inside the foreignObject
-  const [paneKeyPositions, setPaneKeyPositions] = useState<Record<string, {x: number, y: number, w: number, h: number}>>({});
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
 
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg || !showInfoPane) { setPaneKeyPositions({}); return; }
-    const doMeasure = () => {
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return;
-      const elements = svg.querySelectorAll('[data-pane-arrow-id]');
-      const positions: Record<string, {x: number, y: number}> = {};
-      elements.forEach(el => {
-        const id = el.getAttribute('data-pane-arrow-id');
-        if (!id) return;
-        const rect = el.getBoundingClientRect();
-        const ctmInv = ctm.inverse();
-        const ptC = svg.createSVGPoint();
-        ptC.x = rect.left + rect.width / 2;
-        ptC.y = rect.top + rect.height / 2;
-        const svgC = ptC.matrixTransform(ctmInv);
-        const ptTL = svg.createSVGPoint();
-        ptTL.x = rect.left; ptTL.y = rect.top;
-        const svgTL = ptTL.matrixTransform(ctmInv);
-        const ptBR = svg.createSVGPoint();
-        ptBR.x = rect.right; ptBR.y = rect.bottom;
-        const svgBR = ptBR.matrixTransform(ctmInv);
-        positions[id] = {
-          x: svgC.x, y: svgC.y,
-          w: Math.abs(svgBR.x - svgTL.x),
-          h: Math.abs(svgBR.y - svgTL.y)
-        };
-      });
-      setPaneKeyPositions(positions);
-    };
-    // Use rAF so we measure after each browser paint — updates live during drag
-    const raf = requestAnimationFrame(doMeasure);
-    return () => cancelAnimationFrame(raf);
-  }, [showInfoPane, combos, tapDances, infoPanePos, svgRef, viewOff, printZoom]);
-
-  const arrows = buildCanvasArrows(paneKeyPositions);
+  const arrows = buildCanvasArrows();
 
   const Keycap = ({ children, targetLayer, arrowId }: { children: React.ReactNode, targetLayer?: number | null, arrowId?: string }) => {
     const isLayerTrigger = targetLayer != null && colorLayerButtons;
@@ -490,90 +482,172 @@ export function PrintCanvas({
             );
           })}
 
-          {/* Info Pane — rendered before arrows so arrows draw on top */}
-          {showInfoPane && (
-            <g transform={`translate(${infoPanePos.x}, ${infoPanePos.y})`}>
-              <foreignObject x={0} y={0} width={340} height={1200}>
-                <div style={{
-                  width: '100%',
-                  background: theme.id === 'mono_print' ? '#ffffff' : theme.bg,
-                  border: `2px solid ${theme.boardColor}`,
-                  borderRadius: '12px',
-                  color: theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText,
-                  fontFamily: fontFamily,
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}>
-                  <div onMouseDown={onPaneDown} className="no-print" style={{
-                    padding: '10px 16px',
-                    background: theme.id === 'mono_print' ? '#f4f4f5' : theme.boardColor,
-                    cursor: 'move',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    color: theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText,
-                    borderTopLeftRadius: '10px',
-                    borderTopRightRadius: '10px',
-                    borderBottom: theme.id === 'mono_print' ? '1px solid #000000' : 'none'
-                  }}>
-                    Layout Info & Extras
-                  </div>
-                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div>
-                      <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: theme.keyAccentText }}>{layoutInfo?.name || 'Default Layout'}</h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '13px', opacity: 0.9 }}>
-                        <span>Tapping Term:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.tappingTerm ?? 'N/A'} ms</span>
-                        <span>Combo Term:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.comboTerm ?? 'N/A'} ms</span>
-                        <span>One-shot:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.oneshotTimeout ?? 'N/A'} ms</span>
-                      </div>
-                    </div>
+          {/* Info Pane — rendered as pure SVG elements so it behaves identically on screen and print */}
+          {showInfoPane && (() => {
+            const paneW = 340;
+            const headerH = 38;
+            const contentPad = 16;
+            const metadataH = 93;
+            const blockGap = 16;
+            const subHeaderH = 31;
+            const rowH = 32;
 
-                    {combos.length > 0 && (
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', borderBottom: `1px solid ${theme.boardColor}`, paddingBottom: '4px' }}>Combos</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 12px', fontSize: '12px' }}>
-                          {combos.map((c, i) => (
-                            <React.Fragment key={i}>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px', opacity: 0.9 }}>
-                                {c.keys.filter(k => k && k !== 'KC_NO').map((k, idx) => (
-                                  <React.Fragment key={idx}>
-                                    {idx > 0 && <span style={{ opacity: 0.5 }}>+</span>}
-                                    <Keycap>{formatLabel(translateKeycode(k).label || k, labelMode)}</Keycap>
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                <Keycap targetLayer={getTargetLayer(c.action, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(c.action, mappedLayers.length)}`}>{formatLabel(translateKeycode(c.action).label || c.action, labelMode)}</Keycap>
-                              </div>
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+            // Compute exact height
+            const cLen = combos ? combos.length : 0;
+            const tdLen = tapDances ? tapDances.length : 0;
+            const paneHeight = headerH + contentPad + metadataH +
+              (cLen > 0 ? blockGap + subHeaderH + cLen * rowH : 0) +
+              (tdLen > 0 ? blockGap + subHeaderH + tdLen * rowH : 0) + 16;
 
-                    {tapDances.length > 0 && (
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', borderBottom: `1px solid ${theme.boardColor}`, paddingBottom: '4px' }}>Tap Dances</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 12px', fontSize: '12px' }}>
-                          {tapDances.map((td, i) => (
-                            <React.Fragment key={i}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
-                                <span style={{ opacity: 0.7 }}>Tap:</span>
-                                <Keycap targetLayer={getTargetLayer(td.tap, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(td.tap, mappedLayers.length)}`}>{formatLabel(translateKeycode(td.tap).label || td.tap, labelMode)}</Keycap>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ opacity: 0.7 }}>Hold:</span>
-                                <Keycap targetLayer={getTargetLayer(td.hold, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(td.hold, mappedLayers.length)}`}>{formatLabel(translateKeycode(td.hold).label || td.hold, labelMode)}</Keycap>
-                              </div>
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </foreignObject>
-            </g>
-          )}
+            const renderSvgKeycap = (x: number, y: number, w: number, h: number, text: string, targetLayer: number | null = null) => {
+              const isLayerTrigger = targetLayer != null && colorLayerButtons;
+              const bg = isLayerTrigger 
+                ? arrowColors[targetLayer % 8] 
+                : (theme.id === 'mono_print' ? '#f0f0f0' : 'rgba(255,255,255,0.06)');
+              const textColor = isLayerTrigger 
+                ? '#121212' 
+                : (theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText);
+              return (
+                <g>
+                  <rect x={x} y={y} width={w} height={h} fill={bg} stroke={theme.boardColor} strokeWidth={1} rx={4} />
+                  <text x={x + w / 2} y={y + h / 2 + 3.5} textAnchor="middle" fontSize={11} fontWeight="bold" fill={textColor} style={{ userSelect: 'none' }}>{text}</text>
+                </g>
+              );
+            };
+
+            let currentY = headerH + contentPad; // starts at 54
+
+            return (
+              <g transform={`translate(${infoPanePos.x}, ${infoPanePos.y})`}>
+                {/* Background card */}
+                <rect x={0} y={0} width={paneW} height={paneHeight} 
+                  fill={theme.id === 'mono_print' ? '#ffffff' : theme.bg} 
+                  stroke={theme.boardColor} strokeWidth={2} rx={12} />
+
+                {/* Header bar (draggable handle) */}
+                <rect x={1} y={1} width={paneW - 2} height={headerH} 
+                  fill={theme.id === 'mono_print' ? '#f4f4f5' : theme.boardColor} 
+                  stroke={theme.id === 'mono_print' ? '#000000' : 'none'}
+                  strokeWidth={theme.id === 'mono_print' ? 1 : 0}
+                  rx={10} 
+                  onMouseDown={onPaneDown} 
+                  style={{ cursor: 'move' }} 
+                  className="no-print" />
+                
+                {/* Header text */}
+                <text x={16} y={23} 
+                  fill={theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText} 
+                  fontSize={14} fontWeight={600} style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                  Layout Info & Extras
+                </text>
+
+                {/* Metadata Section */}
+                <text x={16} y={currentY + 15} fill={theme.keyAccentText} fontSize={18} fontWeight="bold" style={{ userSelect: 'none' }}>
+                  {layoutInfo?.name || 'Default Layout'}
+                </text>
+
+                <g fontSize={13} fill={theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText} style={{ userSelect: 'none', opacity: 0.9 }}>
+                  <text x={16} y={currentY + 40}>Tapping Term:</text>
+                  <text x={150} y={currentY + 40} fontWeight="bold">{layoutInfo?.tappingTerm ?? 'N/A'} ms</text>
+
+                  <text x={16} y={currentY + 60}>Combo Term:</text>
+                  <text x={150} y={currentY + 60} fontWeight="bold">{layoutInfo?.comboTerm ?? 'N/A'} ms</text>
+
+                  <text x={16} y={currentY + 80}>One-shot:</text>
+                  <text x={150} y={currentY + 80} fontWeight="bold">{layoutInfo?.oneshotTimeout ?? 'N/A'} ms</text>
+                </g>
+
+                {/* Combos Section */}
+                {(() => {
+                  if (cLen === 0) return null;
+                  currentY += metadataH + blockGap; // 163
+                  const sectionY = currentY;
+
+                  return (
+                    <g>
+                      {/* Section line and header */}
+                      <line x1={16} y1={sectionY} x2={paneW - 16} y2={sectionY} stroke={theme.boardColor} strokeWidth={1} />
+                      <text x={16} y={sectionY + 20} fill={theme.keyAlphaText} fontSize={14} fontWeight="bold" style={{ userSelect: 'none' }}>Combos</text>
+
+                      {combos.map((c, idx) => {
+                        const target = getTargetLayer(c.action, mappedLayers.length);
+                        const rowY = sectionY + subHeaderH + idx * rowH; // starts at 194
+                        
+                        // Render trigger keys inline
+                        let keyX = 16;
+                        return (
+                          <g key={idx}>
+                            {/* Left column: Trigger keys */}
+                            {c.keys.filter(k => k && k !== 'KC_NO').map((k, kIdx) => {
+                              const label = formatLabel(translateKeycode(k).label || k, labelMode);
+                              const kw = Math.max(30, label.length * 7 + 10);
+                              const rendered = (
+                                <g key={kIdx} transform={`translate(${keyX}, ${rowY})`}>
+                                  {renderSvgKeycap(0, 0, kw, 26, label)}
+                                </g>
+                              );
+                              keyX += kw + 4;
+                              return rendered;
+                            })}
+
+                            {/* Right column: Target Action Keycap */}
+                            <g transform={`translate(${paneW - 16 - 52}, ${rowY})`}>
+                              {renderSvgKeycap(0, 0, 52, 26, formatLabel(translateKeycode(c.action).label || c.action, labelMode), target)}
+                            </g>
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })()}
+
+                {/* Tap Dances Section */}
+                {(() => {
+                  if (tdLen === 0) return null;
+                  if (cLen > 0) {
+                    currentY += subHeaderH + cLen * rowH - 6 + blockGap;
+                  } else {
+                    currentY += metadataH + blockGap;
+                  }
+                  const sectionY = currentY;
+
+                  return (
+                    <g>
+                      {/* Section line and header */}
+                      <line x1={16} y1={sectionY} x2={paneW - 16} y2={sectionY} stroke={theme.boardColor} strokeWidth={1} />
+                      <text x={16} y={sectionY + 20} fill={theme.keyAlphaText} fontSize={14} fontWeight="bold" style={{ userSelect: 'none' }}>Tap Dances</text>
+
+                      {tapDances.map((td, idx) => {
+                        const tapTarget = getTargetLayer(td.tap, mappedLayers.length);
+                        const holdTarget = getTargetLayer(td.hold, mappedLayers.length);
+                        const rowY = sectionY + subHeaderH + idx * rowH;
+
+                        return (
+                          <g key={idx}>
+                            {/* Left Column: Tap */}
+                            <g transform={`translate(${16}, ${rowY})`}>
+                              <text x={0} y={17} fill={theme.keyAlphaText} opacity={0.7} fontSize={11} style={{ userSelect: 'none' }}>Tap:</text>
+                              <g transform="translate(26, 0)">
+                                {renderSvgKeycap(0, 0, 52, 26, formatLabel(translateKeycode(td.tap).label || td.tap, labelMode), tapTarget)}
+                              </g>
+                            </g>
+
+                            {/* Right Column: Hold */}
+                            <g transform={`translate(${paneW - 16 - 90}, ${rowY})`}>
+                              <text x={0} y={17} fill={theme.keyAlphaText} opacity={0.7} fontSize={11} style={{ userSelect: 'none' }}>Hold:</text>
+                              <g transform="translate(32, 0)">
+                                {renderSvgKeycap(0, 0, 52, 26, formatLabel(translateKeycode(td.hold).label || td.hold, labelMode), holdTarget)}
+                              </g>
+                            </g>
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })()}
+              </g>
+            );
+          })()}
 
           {/* Arrows and Draggable Handles */}
           {!disableArrows && arrows.map((a, i) => {

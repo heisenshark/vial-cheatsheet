@@ -65,8 +65,9 @@ export function useCanvasInteractions(
     setViewOff({ x: -40, y: -40 });
     
     // Initialize history
-    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 20, y: 20 } };
-    setInfoPanePos({ x: 20, y: 20 });
+    const initialPaneX = cw * 2 + 20;
+    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: initialPaneX, y: 20 } };
+    setInfoPanePos({ x: initialPaneX, y: 20 });
     setHistory({ stack: [initialState], index: 0 });
   }, [mappedLayers, parsedKeys, unitSize]);
 
@@ -100,7 +101,9 @@ export function useCanvasInteractions(
     if (showInfoPane) {
       const cLen = combos ? combos.length : 0;
       const tdLen = tapDances ? tapDances.length : 0;
-      const paneHeight = 36 + 32 + 90 + (cLen > 0 ? 31 + cLen * 32 : 0) + (tdLen > 0 ? 31 + tdLen * 32 : 0);
+      const paneHeight = 38 + 16 + 93 +
+        (cLen > 0 ? 16 + 31 + cLen * 32 : 0) +
+        (tdLen > 0 ? 16 + 31 + tdLen * 32 : 0) + 16;
       minX = Math.min(minX, ipp.x);
       minY = Math.min(minY, ipp.y);
       maxX = Math.max(maxX, ipp.x + 340);

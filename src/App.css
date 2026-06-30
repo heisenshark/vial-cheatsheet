@@ -862,6 +862,11 @@ code {
 
 /* ── @media print ──────────────────────────────────────────────────────────── */
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
   /* Hide all UI chrome */
   .maker-header,
   .sidebar-panels,
