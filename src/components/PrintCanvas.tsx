@@ -31,6 +31,13 @@ interface PrintCanvasProps {
   setLayerNames: React.Dispatch<React.SetStateAction<Record<number, string>>>;
   hiddenLayers: Record<number, boolean>;
   setHiddenLayers: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  onRegisterControls?: (controls: {
+    hiddenLayers: Record<number, boolean>;
+    toggleLayerVisibility: (i: number) => void;
+    fitToPage: () => void;
+    resetArrows: () => void;
+    canResetArrows: boolean;
+  }) => void;
 }
 
 function getBoxIntersection(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Point {
@@ -74,7 +81,8 @@ export function PrintCanvas({
   layerNames,
   setLayerNames,
   hiddenLayers,
-  setHiddenLayers
+  setHiddenLayers,
+  onRegisterControls
 }: PrintCanvasProps) {
   const {
     layerPositions,
@@ -94,6 +102,16 @@ export function PrintCanvas({
     toggleLayerVisibility,
     fitVisibleToPage
   } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances, hiddenLayers, setHiddenLayers);
+
+  useEffect(() => {
+    onRegisterControls?.({
+      hiddenLayers,
+      toggleLayerVisibility,
+      fitToPage: fitVisibleToPage,
+      resetArrows,
+      canResetArrows: Object.keys(arrowMidpoints).length > 0
+    });
+  }, [hiddenLayers, toggleLayerVisibility, fitVisibleToPage, resetArrows, arrowMidpoints, onRegisterControls]);
 
   const CPU = unitSize;
   const CPG = keyGap;
@@ -381,12 +399,37 @@ export function PrintCanvas({
   const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
   const my = Math.max(...parsedKeys.map(k => k.y + k.h));
   const kbW = (mx + CPAD * 2) * CPU, kbH = (my + CPAD * 2) * CPU;
-  // Portrait printable area: 194mm x 281mm. Base 1200 -> 1738.
-  // Landscape printable area: 281mm x 194mm. Base 1800 -> 1243.
-  const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
-  const baseVH = printOrientation === 'landscape' ? 1240 : 1735;
+  const baseVW = 2500;
+  const baseVH = 2500;
   const VW = baseVW * printZoom;
   const VH = baseVH * printZoom;
+
+  const printBoxW = printOrientation === 'landscape' ? 1800 * printZoom : 1200 * printZoom;
+  const printBoxH = printOrientation === 'landscape' ? 1240 * printZoom : 1735 * printZoom;
+  const printBoxX = viewOff.x + (VW - printBoxW) / 2;
+  const printBoxY = viewOff.y + (VH - printBoxH) / 2;
+  const activeViewBox = `${printBoxX} ${printBoxY} ${printBoxW} ${printBoxH}`;
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const svg = document.getElementById('print-svg');
+      if (svg) {
+        svg.setAttribute('viewBox', activeViewBox);
+      }
+    };
+    const handleAfterPrint = () => {
+      const svg = document.getElementById('print-svg');
+      if (svg) {
+        svg.setAttribute('viewBox', `${viewOff.x} ${viewOff.y} ${VW} ${VH}`);
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [printOrientation, viewOff.x, viewOff.y, VW, VH, activeViewBox]);
   const isDraggingLayer = svgDrag?.type === 'layer';
 
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
@@ -415,24 +458,12 @@ export function PrintCanvas({
 
   return (
     <>
-      <div className="canvas-hint no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <span>🖱 Drag keyboards to arrange (snaps to align) · Drag 3 points on arrows to bend · Drag background/wheel to pan · Ctrl+Wheel to zoom</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary btn-sm" onClick={fitVisibleToPage} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }} title="Scale and center all visible layers to fit on one page">
-            🔍 Fit to Page
-          </button>
-          {Object.keys(arrowMidpoints).length > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={() => resetArrows()} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }} title="Reset all arrow curves to their default calculated positions">
-              🔄 Reset Arrows
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="print-svg-container" style={{ background: theme.bg, borderRadius: 12, overflow: 'hidden' }}>
+      <div className="print-svg-container" style={{ background: theme.bg, borderRadius: 12, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}>
         <svg ref={svgRef as React.RefObject<SVGSVGElement>}
           id="print-svg"
           viewBox={`${viewOff.x} ${viewOff.y} ${VW} ${VH}`}
-          style={{ display: 'block', width: '100%', height: '70vh', cursor: svgDrag ? 'grabbing' : 'grab', fontFamily }}
+          data-active-viewbox={activeViewBox}
+          style={{ display: 'block', width: '100%', flexGrow: 1, cursor: svgDrag ? 'grabbing' : 'grab', fontFamily }}
           onMouseDown={onCanvasDown}
           onMouseMove={onSVGMove}
           onMouseUp={onSVGUp}
@@ -455,10 +486,10 @@ export function PrintCanvas({
           </defs>
 
           {/* Print Boundary Overlay */}
-          <rect x={viewOff.x + 20} y={viewOff.y + 20} width={VW - 40} height={VH - 40} 
+          <rect x={printBoxX} y={printBoxY} width={printBoxW} height={printBoxH} 
             fill="none" stroke="var(--amber-500)" strokeWidth="4" strokeDasharray="12,12" 
             rx="8" className="no-print" style={{ pointerEvents: 'none', opacity: 0.5 }} />
-          <text x={viewOff.x + 30} y={viewOff.y + 45} fill="var(--amber-500)" fontSize="16" fontWeight="bold" 
+          <text x={printBoxX + 10} y={printBoxY + 25} fill="var(--amber-500)" fontSize="16" fontWeight="bold" 
             className="no-print" style={{ pointerEvents: 'none', opacity: 0.7 }}>Print Boundary (A4 {printOrientation})</text>
 
           {/* Arrow shadows */}

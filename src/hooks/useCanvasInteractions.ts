@@ -118,13 +118,17 @@ export function useCanvasInteractions(
     
     const contentW = maxX - minX;
     const contentH = maxY - minY;
-    const baseVW = printOrientation === 'landscape' ? 1800 : 1200;
-    const baseVH = printOrientation === 'landscape' ? 1270 : 1700;
     
-    const requiredZoom = Math.max(contentW / baseVW, contentH / baseVH);
+    // Calculate zoom needed to fit content strictly inside the print boundary
+    const printVW = printOrientation === 'landscape' ? 1800 : 1200;
+    const printVH = printOrientation === 'landscape' ? 1240 : 1735;
+    
+    const requiredZoom = Math.max(contentW / printVW, contentH / printVH);
     const finalZoom = Math.max(0.2, Math.min(5.0, requiredZoom));
     setPrintZoom(finalZoom);
     
+    const baseVW = 2500;
+    const baseVH = 2500;
     const VW = baseVW * finalZoom;
     const VH = baseVH * finalZoom;
     const centerX = minX + contentW / 2;
@@ -296,16 +300,16 @@ export function useCanvasInteractions(
     dragCTM.current = null;
   };
 
-  const toggleLayerVisibility = (idx: number) => {
+  const toggleLayerVisibility = useCallback((idx: number) => {
     const nextHidden = { ...stateRef.current.hiddenLayers, [idx]: !stateRef.current.hiddenLayers[idx] };
     setHiddenLayers(nextHidden);
     commitHistory({ ...stateRef.current, hiddenLayers: nextHidden });
-  };
+  }, [setHiddenLayers, commitHistory]);
 
-  const resetArrows = () => {
+  const resetArrows = useCallback(() => {
     setArrowMidpoints({});
     commitHistory({ ...stateRef.current, arrowMidpoints: {} });
-  };
+  }, [commitHistory]);
 
   return {
     layerPositions,

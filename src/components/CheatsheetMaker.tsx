@@ -41,8 +41,41 @@ export default function CheatsheetMaker() {
   const [canvasControls, setCanvasControls] = useState<{
     hiddenLayers: Record<number, boolean>;
     toggleLayerVisibility: (i: number) => void;
+    fitToPage: () => void;
+    resetArrows: () => void;
+    canResetArrows: boolean;
   } | null>(null);
-  const [sidebarLayersCollapsed, setSidebarLayersCollapsed] = useState(false);
+  
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
+    layers: false,
+    theme: true,
+    typography: true,
+    dimensions: true
+  });
+  const togglePanel = (p: string) => setCollapsedPanels(prev => ({...prev, [p]: !prev[p]}));
+
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      setSidebarWidth(Math.max(180, Math.min(600, startWidth + delta)));
+    };
+    
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+    };
+    
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'ew-resize';
+  };
 
   const theme: Theme = (THEMES as any)[themeId];
   const ARROW_COLORS = ['#a7c080', '#83c092', '#7fbbb3', '#d699b6', '#dbbc7f', '#e69875', '#e67e80', '#9da9a0'];
@@ -62,6 +95,15 @@ export default function CheatsheetMaker() {
     if (!preset) return;
     setParsedKeys(parseKLE(preset.keymap));
   }, [selectedPreset]);
+
+  useEffect(() => {
+    if (mappedLayers.length > 0) {
+      document.body.classList.add('file-loaded');
+    } else {
+      document.body.classList.remove('file-loaded');
+    }
+    return () => document.body.classList.remove('file-loaded');
+  }, [mappedLayers.length]);
 
   const { adjustedParsedKeys, adjustedMappedLayers } = React.useMemo(() => {
     if (splitGap === 0 || parsedKeys.length === 0) return { adjustedParsedKeys: parsedKeys, adjustedMappedLayers: mappedLayers };
@@ -150,6 +192,12 @@ export default function CheatsheetMaker() {
     if (!el) return;
     const clone = el.cloneNode(true) as SVGSVGElement;
     clone.querySelectorAll('.no-print').forEach(node => node.remove());
+
+    const pbAttr = el.getAttribute('data-active-viewbox');
+    if (pbAttr) {
+      clone.setAttribute('viewBox', pbAttr);
+    }
+
     const src = '<?xml version="1.0" standalone="no">\n' + new XMLSerializer().serializeToString(clone);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
@@ -170,20 +218,7 @@ export default function CheatsheetMaker() {
   return (
     <div className="maker-container">
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-
-      <header className="maker-header">
-        <div className="header-info">
-          <h1>Vial Cheatsheet Generator</h1>
-          <p>Upload your <code>.vil</code> file to generate a cheatsheet for every layer</p>
-        </div>
-        <div className="header-actions">
-          {mappedLayers.length > 0 && (
-            <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Print Layout</button>
-          )}
-          <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>📂 Upload .vil File</button>
-          <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json,.vil" onChange={e => handleFileInput(e.target.files?.[0])} />
-        </div>
-      </header>
+      <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json,.vil" onChange={e => handleFileInput(e.target.files?.[0])} />
 
       <div className="workspace-grid">
         <div className="canvas-wrapper">
@@ -211,46 +246,7 @@ export default function CheatsheetMaker() {
                 }
               `}</style>
 
-              <div className="print-toolbar no-print">
-                <div className="print-toolbar-group">
-                  <span className="print-toolbar-label">A4 Layout:</span>
-                  <div className="print-toolbar-btn-group">
-                    <button className={`print-btn-toggle ${printOrientation === 'landscape' ? 'active' : ''}`} onClick={() => setPrintOrientation('landscape')}>Landscape (Horizontal)</button>
-                    <button className={`print-btn-toggle ${printOrientation === 'portrait' ? 'active' : ''}`} onClick={() => setPrintOrientation('portrait')}>Portrait (Vertical)</button>
-                  </div>
-                </div>
 
-                <div className="print-toolbar-group checkboxes-row" style={{ gap: '1rem' }}>
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} />
-                    <span>Show Arrows</span>
-                  </label>
-
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} />
-                    <span>Color Coded Layers</span>
-                  </label>
-                </div>
-
-                <div className="print-toolbar-group">
-                  <span className="print-toolbar-label">Zoom:</span>
-                  <button className="btn btn-secondary" onClick={() => setPrintZoom(z => Math.max(0.2, z - 0.1))} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>➖</button>
-                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--slate-200)', minWidth: '45px', textAlign: 'center' }}>{Math.round(printZoom * 100)}%</span>
-                  <button className="btn btn-secondary" onClick={() => setPrintZoom(z => Math.min(5.0, z + 0.1))} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}>➕</button>
-                </div>
-
-                <div className="print-toolbar-group sliders-grid" style={{ minWidth: '150px', marginTop: 0 }}>
-                  <div className="slider-item" style={{ gap: '0.15rem' }}>
-                    <label style={{ color: 'var(--slate-400)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Arrow Width: {arrowWidth}px</label>
-                    <input type="range" min="1" max="8" step="0.5" value={arrowWidth} onChange={e => setArrowWidth(Number(e.target.value))} />
-                  </div>
-                </div>
-
-                <div className="print-toolbar-group">
-                  <button className="btn btn-secondary" onClick={downloadPrintSVG} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>💾 Download SVG</button>
-                  <button className="btn btn-primary" onClick={() => window.print()} style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}>🖨️ Print / PDF</button>
-                </div>
-              </div>
 
               <PrintCanvas
                 mappedLayers={adjustedMappedLayers}
@@ -287,7 +283,64 @@ export default function CheatsheetMaker() {
         </div>
 
         {/* ── Sidebar Tools ── */}
-        <aside className="sidebar-panels no-print">
+        <aside className="sidebar-panels no-print" style={{ width: sidebarWidth }}>
+          <div className="resize-handle" onMouseDown={startResizing} />
+
+          <div className="glass-card panel" style={{ paddingBottom: '0.75rem', background: 'rgba(255,255,255,0.02)' }}>
+            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}>📂 Upload .vil File</button>
+          </div>
+
+          <div className="glass-card panel">
+            <h3>Canvas & Export</h3>
+            <div className="form-group">
+              <label>A4 Orientation</label>
+              <select className="select-input" value={printOrientation} onChange={(e) => setPrintOrientation(e.target.value)}>
+                <option value="landscape">Landscape</option>
+                <option value="portrait">Portrait</option>
+              </select>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <label className="checkbox-label">
+                <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} />
+                <span>Show Arrows</span>
+              </label>
+              <label className="checkbox-label">
+                <input type="checkbox" checked={colorLayerButtons} onChange={e => setColorLayerButtons(e.target.checked)} />
+                <span>Color Coded Layers</span>
+              </label>
+            </div>
+
+            <div className="sliders-grid" style={{ marginTop: '0.5rem' }}>
+              <div className="slider-item">
+                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Zoom</span>
+                  <span>{Math.round(printZoom * 100)}%</span>
+                </label>
+                <input type="range" min="0.2" max="5.0" step="0.1" value={printZoom} onChange={e => setPrintZoom(Number(e.target.value))} />
+              </div>
+              <div className="slider-item">
+                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Arrow Width</span>
+                  <span>{arrowWidth}px</span>
+                </label>
+                <input type="range" min="1" max="8" step="0.5" value={arrowWidth} onChange={e => setArrowWidth(Number(e.target.value))} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={downloadPrintSVG}>💾 SVG</button>
+              <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => window.print()}>🖨️ PDF</button>
+            </div>
+            {canvasControls && (
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={canvasControls.fitToPage}>🔍 Fit to Page</button>
+                {canvasControls.canResetArrows && (
+                  <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={canvasControls.resetArrows}>🔄 Reset Arrows</button>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="glass-card panel">
             <h3>Physical Layout</h3>
@@ -304,11 +357,11 @@ export default function CheatsheetMaker() {
           </div>
 
           <div className="glass-card panel">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setSidebarLayersCollapsed(!sidebarLayersCollapsed)}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: collapsedPanels.layers ? 0 : '0.5rem' }} onClick={() => togglePanel('layers')}>
               <h3 style={{ margin: 0 }}>Layers & Panels</h3>
-              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{sidebarLayersCollapsed ? '▼' : '▲'}</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{collapsedPanels.layers ? '▼' : '▲'}</span>
             </div>
-            {!sidebarLayersCollapsed && (
+            {!collapsedPanels.layers && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                 {mappedLayers.map((_, i) => {
                   const isVisible = !hiddenLayers[i];
@@ -369,8 +422,12 @@ export default function CheatsheetMaker() {
           </div>
 
           <div className="glass-card panel">
-            <h3>Theme</h3>
-            <div className="theme-grid">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: collapsedPanels.theme ? 0 : '0.5rem' }} onClick={() => togglePanel('theme')}>
+              <h3 style={{ margin: 0 }}>Theme</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{collapsedPanels.theme ? '▼' : '▲'}</span>
+            </div>
+            {!collapsedPanels.theme && (
+              <div className="theme-grid">
               {Object.values(THEMES).map((t: any) => (
                 <button key={t.id} className={`theme-badge ${themeId === t.id ? 'active' : ''}`} onClick={() => setThemeId(t.id)} style={{ background: t.bg }}>
                   <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAlpha }}></span>
@@ -378,12 +435,18 @@ export default function CheatsheetMaker() {
                   <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAccent }}></span>
                 </button>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="glass-card panel">
-            <h3>Typography & Labels</h3>
-            <div className="form-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: collapsedPanels.typography ? 0 : '0.5rem' }} onClick={() => togglePanel('typography')}>
+              <h3 style={{ margin: 0 }}>Typography & Labels</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{collapsedPanels.typography ? '▼' : '▲'}</span>
+            </div>
+            {!collapsedPanels.typography && (
+              <>
+                <div className="form-group">
               <label>Label Style</label>
               <select className="select-input" value={labelMode} onChange={(e) => setLabelMode(e.target.value)}>
                 <option value="default">QMK Defaults</option>
@@ -406,12 +469,18 @@ export default function CheatsheetMaker() {
                 <label>Font Size: {fontSize}px</label>
                 <input type="range" min="8" max="18" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} />
               </div>
-            </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="glass-card panel">
-            <h3>Dimensions</h3>
-            <div className="sliders-grid">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: collapsedPanels.dimensions ? 0 : '0.5rem' }} onClick={() => togglePanel('dimensions')}>
+              <h3 style={{ margin: 0 }}>Dimensions</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{collapsedPanels.dimensions ? '▼' : '▲'}</span>
+            </div>
+            {!collapsedPanels.dimensions && (
+              <div className="sliders-grid">
               <div className="slider-item">
                 <label>Gap: {keyGap}px</label>
                 <input type="range" min="0" max="10" value={keyGap} onChange={e => setKeyGap(Number(e.target.value))} />
@@ -423,8 +492,9 @@ export default function CheatsheetMaker() {
               <div className="slider-item">
                 <label>Border Radius: {radius}px</label>
                 <input type="range" min="0" max="16" value={radius} onChange={e => setRadius(Number(e.target.value))} />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </aside>
       </div>
