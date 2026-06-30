@@ -54,7 +54,14 @@ export interface SnapGuide {
 export type DragState =
   | { type: 'pan'; sx: number; sy: number; ox: number; oy: number }
   | { type: 'layer'; layerIdx: number; sx: number; sy: number; ox: number; oy: number }
-  | { type: 'arrowControl'; arrowId: string; pointIndex: number; sx: number; sy: number; ox: number; oy: number };
+  | { type: 'arrowControl'; arrowId: string; pointIndex: number; sx: number; sy: number; ox: number; oy: number }
+  | { type: 'pane'; sx: number; sy: number; ox: number; oy: number };
+
+export interface LayoutInfo {
+  name: string;
+  tappingTerm?: number;
+  comboTerm?: number;
+}
 
 export interface Combo {
   idx: number;

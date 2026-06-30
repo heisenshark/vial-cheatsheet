@@ -5,6 +5,7 @@ interface HistoryState {
   layerPositions: Record<number, Point>;
   arrowMidpoints: Record<string, Point[]>;
   hiddenLayers: Record<number, boolean>;
+  infoPanePos: Point;
 }
 
 export function useCanvasInteractions(
@@ -14,18 +15,20 @@ export function useCanvasInteractions(
   keyGap: number,
   printOrientation: string,
   printZoom: number,
-  setPrintZoom: React.Dispatch<React.SetStateAction<number>>
+  setPrintZoom: React.Dispatch<React.SetStateAction<number>>,
+  showInfoPane: boolean
 ) {
   const [layerPositions, setLayerPos] = useState<Record<number, Point>>({});
   const [arrowMidpoints, setArrowMidpoints] = useState<Record<string, Point[]>>({});
   const [hiddenLayers, setHiddenLayers] = useState<Record<number, boolean>>({});
+  const [infoPanePos, setInfoPanePos] = useState<Point>({ x: 0, y: 0 });
   const [viewOff, setViewOff] = useState<Point>({ x: -40, y: -40 });
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   
   const [history, setHistory] = useState({ stack: [] as HistoryState[], index: -1 });
-  const stateRef = useRef<HistoryState>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {} });
-  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers };
+  const stateRef = useRef<HistoryState & { infoPanePos: Point }>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 0, y: 0 } });
+  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos };
   
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragCTM = useRef<DOMMatrix | null>(null);
@@ -56,7 +59,8 @@ export function useCanvasInteractions(
     setViewOff({ x: -40, y: -40 });
     
     // Initialize history
-    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {} };
+    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 20, y: 20 } };
+    setInfoPanePos({ x: 20, y: 20 });
     setHistory({ stack: [initialState], index: 0 });
   }, [mappedLayers, parsedKeys, unitSize]);
 
@@ -70,19 +74,30 @@ export function useCanvasInteractions(
     const kbW = (mx + CPAD * 2) * CPU;
     const kbH = (my + CPAD * 2) * CPU;
     
+    // Always read fresh state from stateRef to avoid stale closure
+    const { layerPositions: lp, hiddenLayers: hl, infoPanePos: ipp } = stateRef.current;
+
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
     let hasVisible = false;
     
     mappedLayers.forEach((_, i) => {
-      if (hiddenLayers[i]) return;
-      const p = layerPositions[i] || { x: 0, y: 0 };
+      if (hl[i]) return;
+      const p = lp[i] || { x: 0, y: 0 };
       minX = Math.min(minX, p.x);
       minY = Math.min(minY, p.y);
       maxX = Math.max(maxX, p.x + kbW);
       maxY = Math.max(maxY, p.y + kbH + CLABEL);
       hasVisible = true;
     });
+
+    if (showInfoPane) {
+      minX = Math.min(minX, ipp.x);
+      minY = Math.min(minY, ipp.y);
+      maxX = Math.max(maxX, ipp.x + 360);
+      maxY = Math.max(maxY, ipp.y + 700);
+      hasVisible = true;
+    }
     
     if (!hasVisible) return;
     const margin = 80;
@@ -103,7 +118,7 @@ export function useCanvasInteractions(
     const centerX = minX + contentW / 2;
     const centerY = minY + contentH / 2;
     setViewOff({ x: centerX - VW / 2, y: centerY - VH / 2 });
-  }, [parsedKeys, mappedLayers, hiddenLayers, layerPositions, printOrientation, setPrintZoom, unitSize]);
+  }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane]);
 
   useEffect(() => {
     fitVisibleToPage();
@@ -146,6 +161,7 @@ export function useCanvasInteractions(
                 setLayerPos(state.layerPositions);
                 setArrowMidpoints(state.arrowMidpoints);
                 setHiddenLayers(state.hiddenLayers);
+                if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
                 return { ...prev, index: nextIndex };
               }
               return prev;
@@ -158,6 +174,7 @@ export function useCanvasInteractions(
                 setLayerPos(state.layerPositions);
                 setArrowMidpoints(state.arrowMidpoints);
                 setHiddenLayers(state.hiddenLayers);
+                if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
                 return { ...prev, index: nextIndex };
               }
               return prev;
@@ -196,6 +213,15 @@ export function useCanvasInteractions(
     const { x, y } = toSVG(e);
     const p = layerPositions[layerIdx] || { x: 0, y: 0 };
     setSvgDrag({ type: 'layer', layerIdx, sx: x, sy: y, ox: p.x, oy: p.y });
+  };
+
+  const onPaneDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
+    dragCTM.current = svg.getScreenCTM()?.inverse() ?? null;
+    const { x, y } = toSVG(e);
+    setSvgDrag({ type: 'pane', sx: x, sy: y, ox: infoPanePos.x, oy: infoPanePos.y });
   };
 
   const onArrowHandleDown = (e: React.MouseEvent, arrowId: string, pointIndex: number, curX: number, curY: number) => {
@@ -244,11 +270,13 @@ export function useCanvasInteractions(
         arr[svgDrag.pointIndex] = { x: nx, y: ny };
         return { ...prev, [svgDrag.arrowId]: arr };
       });
+    } else if (svgDrag.type === 'pane') {
+      setInfoPanePos({ x: svgDrag.ox + dx, y: svgDrag.oy + dy });
     }
   };
 
   const onSVGUp = () => {
-    if (svgDrag && (svgDrag.type === 'layer' || svgDrag.type === 'arrowControl')) {
+    if (svgDrag && (svgDrag.type === 'layer' || svgDrag.type === 'arrowControl' || svgDrag.type === 'pane')) {
       commitHistory(stateRef.current);
     }
     setSvgDrag(null);
@@ -272,12 +300,14 @@ export function useCanvasInteractions(
     arrowMidpoints,
     resetArrows,
     hiddenLayers,
+    infoPanePos,
     viewOff,
     svgDrag,
     snapGuides,
     svgRef,
     onCanvasDown,
     onLayerDown,
+    onPaneDown,
     onArrowHandleDown,
     onSVGMove,
     onSVGUp,

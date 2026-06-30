@@ -14,6 +14,8 @@ export default function CheatsheetMaker() {
 
   const [combos, setCombos] = useState<Combo[]>([]);
   const [tapDances, setTapDances] = useState<TapDance[]>([]);
+  const [layoutInfo, setLayoutInfo] = useState<any>({ name: 'Default' });
+  const [showInfoPane, setShowInfoPane] = useState(false);
 
   const [selectedPreset, setSelectedPreset] = useState('split58');
   const [activeLayer, setActiveLayer] = useState<number | 'extras' | null>(null);
@@ -102,7 +104,16 @@ export default function CheatsheetMaker() {
           }))
           .filter((td: TapDance) => [td.tap, td.hold, td.doubleTap, td.tapHold].some(k => k && k !== 'KC_NO'));
         setTapDances(active);
+        setTapDances(active);
       }
+
+      const info: any = { name: name.replace(/\.vil$/i, '') };
+      if (data.settings) {
+        if (data.settings["4"] !== undefined) info.tappingTerm = data.settings["4"];
+        if (data.settings["7"] !== undefined) info.comboTerm = data.settings["7"];
+        if (data.settings["25"] !== undefined) info.oneshotTimeout = data.settings["25"];
+      }
+      setLayoutInfo(info);
 
       showToast('success', `Loaded "${name}" — ${flatLayers.length} layers, ${keys.length} keys`);
     } catch (e: any) {
@@ -256,6 +267,11 @@ export default function CheatsheetMaker() {
                 setDisableArrows={setDisableArrows}
                 setColorLayerButtons={setColorLayerButtons}
                 arrowWidth={arrowWidth}
+                layoutInfo={layoutInfo}
+                combos={combos}
+                tapDances={tapDances}
+                showInfoPane={showInfoPane}
+                setShowInfoPane={setShowInfoPane}
               />
             </div>
           ) : (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCanvasInteractions } from '../hooks/useCanvasInteractions';
 import { translateKeycode } from '../keycodes';
 import { formatLabel, solveCatmullRom, getTargetLayer } from '../utils';
@@ -21,8 +21,12 @@ interface PrintCanvasProps {
   setPrintZoom: React.Dispatch<React.SetStateAction<number>>;
   disableArrows: boolean;
   setDisableArrows: React.Dispatch<React.SetStateAction<boolean>>;
-  setColorLayerButtons: React.Dispatch<React.SetStateAction<boolean>>;
   arrowWidth: number;
+  layoutInfo?: any;
+  combos?: any[];
+  tapDances?: any[];
+  showInfoPane?: boolean;
+  setShowInfoPane: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 function getBoxIntersection(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Point {
@@ -56,25 +60,33 @@ export function PrintCanvas({
   printZoom,
   setPrintZoom,
   disableArrows,
-  arrowWidth
+  setColorLayerButtons,
+  arrowWidth,
+  layoutInfo,
+  combos = [],
+  tapDances = [],
+  showInfoPane,
+  setShowInfoPane
 }: PrintCanvasProps) {
   const {
     layerPositions,
     arrowMidpoints,
     resetArrows,
     hiddenLayers,
+    infoPanePos,
     viewOff,
     svgDrag,
     snapGuides,
     svgRef,
     onCanvasDown,
     onLayerDown,
+    onPaneDown,
     onArrowHandleDown,
     onSVGMove,
     onSVGUp,
     toggleLayerVisibility,
     fitVisibleToPage
-  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom);
+  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane);
 
   const CPU = unitSize;
   const CPG = keyGap;
@@ -156,7 +168,7 @@ export function PrintCanvas({
       );
     });
 
-  const buildCanvasArrows = () => {
+  const buildCanvasArrows = (paneKeyPositions: Record<string, {x: number, y: number, w: number, h: number}> = {}) => {
     if (!parsedKeys.length || !mappedLayers.length) return [];
     const mx = Math.max(...parsedKeys.map(k => k.x + k.w));
     const my = Math.max(...parsedKeys.map(k => k.y + k.h));
@@ -236,6 +248,71 @@ export function PrintCanvas({
         gIdx++;
       });
     });
+
+    if (showInfoPane) {
+      const paneW = 340;
+      const paneH = 36; // just header height — arrow comes from top of pane
+      const paneCx = infoPanePos.x + paneW / 2;
+      const paneCy = infoPanePos.y + paneH / 2;
+
+      // Collect unique target layers from combos and tap dances
+      const targetLayers = new Set<number>();
+      combos.forEach(c => {
+        const to = getTargetLayer(c.action, mappedLayers.length);
+        if (to !== null && layerPositions[to] && !hiddenLayers[to]) targetLayers.add(to);
+      });
+      tapDances.forEach(td => {
+        [td.tap, td.hold].forEach(action => {
+          const to = getTargetLayer(action, mappedLayers.length);
+          if (to !== null && layerPositions[to] && !hiddenLayers[to]) targetLayers.add(to);
+        });
+      });
+
+      targetLayers.forEach(to => {
+        const arrowId = `pane-to-${to}`;
+        const tp = layerPositions[to];
+        const tCx = tp.x + kbW / 2;
+        const tCy = tp.y + (kbH + CLABEL) / 2;
+
+        const custom = arrowMidpoints[arrowId];
+
+        // Start is clamped to keycap edge: drag position used as direction, projected onto box boundary
+        const measured = paneKeyPositions[arrowId];
+        let sx: number, sy: number;
+        if (measured) {
+          // Use custom[3] as direction target if dragged, else aim toward target layer
+          const aimed = (custom && custom[3]) ? custom[3] : { x: tCx, y: tCy };
+          const edge = getBoxIntersection(measured.x, measured.y, measured.w, measured.h, aimed.x, aimed.y);
+          sx = edge.x;
+          sy = edge.y;
+        } else {
+          sx = infoPanePos.x + paneW / 2;
+          sy = infoPanePos.y;
+        }
+
+        // End: snap to nearest edge of target layer box
+        const endAimX = (custom && custom[4]) ? custom[4].x : paneCx;
+        const endAimY = (custom && custom[4]) ? custom[4].y : paneCy;
+        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAimX, endAimY);
+        const ex = endPt.x, ey = endPt.y;
+
+        const dx = ex - sx, dy = ey - sy;
+        const c1x = sx + dx * 0.25, c1y = sy + dy * 0.25;
+        const c2x = ex - dx * 0.25, c2y = ey - dy * 0.25;
+        const mx2 = (c1x + c2x) / 2, my2 = (c1y + c2y) / 2;
+
+        const p0 = (custom && custom[0]) ? custom[0] : { x: c1x, y: c1y };
+        const p1 = (custom && custom[1]) ? custom[1] : { x: mx2, y: my2 };
+        const p2 = (custom && custom[2]) ? custom[2] : { x: c2x, y: c2y };
+
+        arrows.push({
+          arrowId, fromLayer: -1, toLayer: to,
+          sx, sy, ex, ey, p0, p1, p2,
+          color: (theme.id === 'mono_print' && !colorLayerButtons) ? '#000000' : arrowColors[to % 8]
+        });
+      });
+    }
+
     return arrows;
   };
 
@@ -251,8 +328,68 @@ export function PrintCanvas({
   const baseVH = printOrientation === 'landscape' ? 1240 : 1735;
   const VW = baseVW * printZoom;
   const VH = baseVH * printZoom;
-  const arrows = buildCanvasArrows();
   const isDraggingLayer = svgDrag?.type === 'layer';
+
+  // Measure actual SVG-space positions of layer-trigger keycaps inside the foreignObject
+  const [paneKeyPositions, setPaneKeyPositions] = useState<Record<string, {x: number, y: number, w: number, h: number}>>({});
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !showInfoPane) { setPaneKeyPositions({}); return; }
+    const doMeasure = () => {
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const elements = svg.querySelectorAll('[data-pane-arrow-id]');
+      const positions: Record<string, {x: number, y: number}> = {};
+      elements.forEach(el => {
+        const id = el.getAttribute('data-pane-arrow-id');
+        if (!id) return;
+        const rect = el.getBoundingClientRect();
+        const ctmInv = ctm.inverse();
+        const ptC = svg.createSVGPoint();
+        ptC.x = rect.left + rect.width / 2;
+        ptC.y = rect.top + rect.height / 2;
+        const svgC = ptC.matrixTransform(ctmInv);
+        const ptTL = svg.createSVGPoint();
+        ptTL.x = rect.left; ptTL.y = rect.top;
+        const svgTL = ptTL.matrixTransform(ctmInv);
+        const ptBR = svg.createSVGPoint();
+        ptBR.x = rect.right; ptBR.y = rect.bottom;
+        const svgBR = ptBR.matrixTransform(ctmInv);
+        positions[id] = {
+          x: svgC.x, y: svgC.y,
+          w: Math.abs(svgBR.x - svgTL.x),
+          h: Math.abs(svgBR.y - svgTL.y)
+        };
+      });
+      setPaneKeyPositions(positions);
+    };
+    // Use rAF so we measure after each browser paint — updates live during drag
+    const raf = requestAnimationFrame(doMeasure);
+    return () => cancelAnimationFrame(raf);
+  }, [showInfoPane, combos, tapDances, infoPanePos, svgRef, viewOff, printZoom]);
+
+  const arrows = buildCanvasArrows(paneKeyPositions);
+
+  const Keycap = ({ children, targetLayer, arrowId }: { children: React.ReactNode, targetLayer?: number | null, arrowId?: string }) => {
+    const isLayerTrigger = targetLayer != null && colorLayerButtons;
+    return (
+      <div
+        data-pane-arrow-id={targetLayer != null && arrowId ? arrowId : undefined}
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: isLayerTrigger ? arrowColors[targetLayer % 8] : (theme.id === 'mono_print' ? '#f0f0f0' : 'rgba(255,255,255,0.05)'),
+          border: `1px solid ${theme.boardColor}`, borderRadius: '4px', padding: '3px 8px',
+          minWidth: '24px', height: '26px', fontSize: '12px', fontWeight: 600,
+          boxShadow: '0 2px 0 rgba(0,0,0,0.15)', 
+          color: isLayerTrigger ? '#121212' : (theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText),
+          whiteSpace: 'nowrap', margin: '0 2px'
+        }}
+      >
+        {children}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -264,6 +401,10 @@ export function PrintCanvas({
             <span>Layer {i}</span>
           </label>
         ))}
+        <label className="checkbox-label" style={{ margin: 0, marginLeft: 'auto' }}>
+          <input type="checkbox" checked={showInfoPane} onChange={e => setShowInfoPane(e.target.checked)} />
+          <span>Info Pane</span>
+        </label>
       </div>
 
       <div className="canvas-hint no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -355,6 +496,91 @@ export function PrintCanvas({
             );
           })}
 
+          {/* Info Pane — rendered before arrows so arrows draw on top */}
+          {showInfoPane && (
+            <g transform={`translate(${infoPanePos.x}, ${infoPanePos.y})`}>
+              <foreignObject x={0} y={0} width={340} height={1200}>
+                <div style={{
+                  width: '100%',
+                  background: theme.id === 'mono_print' ? '#ffffff' : theme.bg,
+                  border: `2px solid ${theme.boardColor}`,
+                  borderRadius: '12px',
+                  color: theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText,
+                  fontFamily: fontFamily,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <div onMouseDown={onPaneDown} className="no-print" style={{
+                    padding: '10px 16px',
+                    background: theme.id === 'mono_print' ? '#f4f4f5' : theme.boardColor,
+                    cursor: 'move',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    color: theme.id === 'mono_print' ? '#000000' : theme.keyAlphaText,
+                    borderTopLeftRadius: '10px',
+                    borderTopRightRadius: '10px',
+                    borderBottom: theme.id === 'mono_print' ? '1px solid #000000' : 'none'
+                  }}>
+                    Layout Info & Extras
+                  </div>
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: theme.keyAccentText }}>{layoutInfo?.name || 'Default Layout'}</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '13px', opacity: 0.9 }}>
+                        <span>Tapping Term:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.tappingTerm ?? 'N/A'} ms</span>
+                        <span>Combo Term:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.comboTerm ?? 'N/A'} ms</span>
+                        <span>One-shot:</span><span style={{ fontWeight: 600 }}>{layoutInfo?.oneshotTimeout ?? 'N/A'} ms</span>
+                      </div>
+                    </div>
+
+                    {combos.length > 0 && (
+                      <div>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', borderBottom: `1px solid ${theme.boardColor}`, paddingBottom: '4px' }}>Combos</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 12px', fontSize: '12px' }}>
+                          {combos.map((c, i) => (
+                            <React.Fragment key={i}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px', opacity: 0.9 }}>
+                                {c.keys.filter(k => k && k !== 'KC_NO').map((k, idx) => (
+                                  <React.Fragment key={idx}>
+                                    {idx > 0 && <span style={{ opacity: 0.5 }}>+</span>}
+                                    <Keycap>{formatLabel(translateKeycode(k).label || k, labelMode)}</Keycap>
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <Keycap targetLayer={getTargetLayer(c.action, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(c.action, mappedLayers.length)}`}>{formatLabel(translateKeycode(c.action).label || c.action, labelMode)}</Keycap>
+                              </div>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {tapDances.length > 0 && (
+                      <div>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', borderBottom: `1px solid ${theme.boardColor}`, paddingBottom: '4px' }}>Tap Dances</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 12px', fontSize: '12px' }}>
+                          {tapDances.map((td, i) => (
+                            <React.Fragment key={i}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.9 }}>
+                                <span style={{ opacity: 0.7 }}>Tap:</span>
+                                <Keycap targetLayer={getTargetLayer(td.tap, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(td.tap, mappedLayers.length)}`}>{formatLabel(translateKeycode(td.tap).label || td.tap, labelMode)}</Keycap>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ opacity: 0.7 }}>Hold:</span>
+                                <Keycap targetLayer={getTargetLayer(td.hold, mappedLayers.length)} arrowId={`pane-to-${getTargetLayer(td.hold, mappedLayers.length)}`}>{formatLabel(translateKeycode(td.hold).label || td.hold, labelMode)}</Keycap>
+                              </div>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </foreignObject>
+            </g>
+          )}
+
           {/* Arrows and Draggable Handles */}
           {!disableArrows && arrows.map((a, i) => {
             const isDraggingThis = svgDrag && svgDrag.type === 'arrowControl' && (svgDrag as any).arrowId === a.arrowId;
@@ -390,6 +616,7 @@ export function PrintCanvas({
                     <circle cx={a.p2.x} cy={a.p2.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, a.p2.x, a.p2.y)} />
                     <circle cx={a.p2.x} cy={a.p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
 
+                    {/* Start handle: clamped to keycap boundary for pane arrows, free for regular arrows */}
                     <circle cx={a.sx} cy={a.sy} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 3, a.sx, a.sy)} />
                     <circle cx={a.sx} cy={a.sy} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
 
@@ -409,6 +636,7 @@ export function PrintCanvas({
               return <line key={`sg${idx}`} x1={(g.x1||0) - 60} y1={g.y} x2={(g.x2||0) + 60} y2={g.y} stroke="#ff4d4d" strokeWidth={1.5} strokeDasharray="5 3" className="no-print" />;
             }
           })}
+
         </svg>
       </div>
     </>
