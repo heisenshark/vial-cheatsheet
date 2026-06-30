@@ -55,7 +55,9 @@ export type DragState =
   | { type: 'pan'; sx: number; sy: number; ox: number; oy: number }
   | { type: 'layer'; layerIdx: number; sx: number; sy: number; ox: number; oy: number }
   | { type: 'arrowControl'; arrowId: string; pointIndex: number; sx: number; sy: number; ox: number; oy: number }
-  | { type: 'pane'; sx: number; sy: number; ox: number; oy: number };
+  | { type: 'pane'; sx: number; sy: number; ox: number; oy: number }
+  | { type: 'printBox'; sx: number; sy: number; ox: number; oy: number }
+  | { type: 'printBoxResize'; corner: 'tl' | 'tr' | 'bl' | 'br'; sx: number; sy: number; ox: number; oy: number; initialW: number; initialH: number };
 
 export interface LayoutInfo {
   name: string;

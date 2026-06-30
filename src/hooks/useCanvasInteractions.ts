@@ -6,6 +6,9 @@ interface HistoryState {
   arrowMidpoints: Record<string, Point[]>;
   hiddenLayers: Record<number, boolean>;
   infoPanePos: Point;
+  printBoxPos?: Point;
+  printZoom?: number;
+  printScale?: number;
 }
 
 export function useCanvasInteractions(
@@ -28,13 +31,15 @@ export function useCanvasInteractions(
   const hiddenLayers = hiddenLayersProp ?? hiddenLayersLocal;
   const setHiddenLayers = setHiddenLayersProp ?? setHiddenLayersLocal;
   const [infoPanePos, setInfoPanePos] = useState<Point>({ x: 0, y: 0 });
+  const [printBoxPos, setPrintBoxPos] = useState<Point>({ x: 0, y: 0 });
+  const [printScale, setPrintScale] = useState(1);
   const [viewOff, setViewOff] = useState<Point>({ x: -40, y: -40 });
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   
   const [history, setHistory] = useState({ stack: [] as HistoryState[], index: -1 });
-  const stateRef = useRef<HistoryState & { infoPanePos: Point }>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 0, y: 0 } });
-  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos };
+  const stateRef = useRef<HistoryState & { infoPanePos: Point; printBoxPos: Point; printZoom: number; printScale: number }>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 0, y: 0 }, printBoxPos: { x: 0, y: 0 }, printZoom: printZoom, printScale: 1 });
+  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos, printBoxPos, printZoom, printScale };
   
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragCTM = useRef<DOMMatrix | null>(null);
@@ -66,7 +71,8 @@ export function useCanvasInteractions(
     
     // Initialize history
     const initialPaneX = cw * 2 + 20;
-    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: initialPaneX, y: 20 } };
+    const initialPrintBoxPos = { x: 0, y: 0 };
+    const initialState = { layerPositions: pos, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: initialPaneX, y: 20 }, printBoxPos: initialPrintBoxPos, printZoom };
     setInfoPanePos({ x: initialPaneX, y: 20 });
     setHistory({ stack: [initialState], index: 0 });
   }, [mappedLayers, parsedKeys, unitSize]);
@@ -123,18 +129,41 @@ export function useCanvasInteractions(
     const printVW = printOrientation === 'landscape' ? 1800 : 1200;
     const printVH = printOrientation === 'landscape' ? 1240 : 1735;
     
-    const requiredZoom = Math.max(contentW / printVW, contentH / printVH);
-    const finalZoom = Math.max(0.2, Math.min(5.0, requiredZoom));
-    setPrintZoom(finalZoom);
+    // 1. Scale the print boundary to cover the content
+    const requiredPrintScale = Math.max(contentW / printVW, contentH / printVH);
+    const finalPrintScale = Math.max(0.1, Math.min(10.0, requiredPrintScale));
+    setPrintScale(finalPrintScale);
     
+    // 2. Scale the camera so the print boundary is visible on screen
     const baseVW = 2500;
     const baseVH = 2500;
-    const VW = baseVW * finalZoom;
-    const VH = baseVH * finalZoom;
+    const requiredViewZoom = Math.max(
+      (printVW * finalPrintScale + 200) / baseVW,
+      (printVH * finalPrintScale + 200) / baseVH
+    );
+    const finalViewZoom = Math.max(0.1, Math.min(5.0, requiredViewZoom));
+    setPrintZoom(finalViewZoom);
+    
+    const VW = baseVW * finalViewZoom;
+    const VH = baseVH * finalViewZoom;
     const centerX = minX + contentW / 2;
     const centerY = minY + contentH / 2;
+    
+    const newPrintBoxPos = {
+      x: centerX - (printVW * finalPrintScale) / 2,
+      y: centerY - (printVH * finalPrintScale) / 2
+    };
+    
+    setPrintBoxPos(newPrintBoxPos);
     setViewOff({ x: centerX - VW / 2, y: centerY - VH / 2 });
-  }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane, combos, tapDances]);
+    
+    commitHistory({
+      ...stateRef.current,
+      printZoom: finalViewZoom,
+      printScale: finalPrintScale,
+      printBoxPos: newPrintBoxPos
+    });
+  }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane, combos, tapDances, commitHistory]);
 
   useEffect(() => {
     fitVisibleToPage();
@@ -178,6 +207,9 @@ export function useCanvasInteractions(
                 setArrowMidpoints(state.arrowMidpoints);
                 setHiddenLayers(state.hiddenLayers);
                 if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
+                if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
+                if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
+                if (state.printScale !== undefined) setPrintScale(state.printScale);
                 return { ...prev, index: nextIndex };
               }
               return prev;
@@ -191,6 +223,9 @@ export function useCanvasInteractions(
                 setArrowMidpoints(state.arrowMidpoints);
                 setHiddenLayers(state.hiddenLayers);
                 if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
+                if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
+                if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
+                if (state.printScale !== undefined) setPrintScale(state.printScale);
                 return { ...prev, index: nextIndex };
               }
               return prev;
@@ -249,6 +284,24 @@ export function useCanvasInteractions(
     setSvgDrag({ type: 'arrowControl', arrowId, pointIndex, sx: x, sy: y, ox: curX, oy: curY });
   };
 
+  const onPrintBoxDown = (e: React.MouseEvent, curX: number, curY: number) => {
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
+    dragCTM.current = svg.getScreenCTM()?.inverse() ?? null;
+    const { x, y } = toSVG(e);
+    setSvgDrag({ type: 'printBox', sx: x, sy: y, ox: curX, oy: curY });
+  };
+
+  const onPrintBoxResizeDown = (e: React.MouseEvent, corner: 'tl'|'tr'|'bl'|'br', curX: number, curY: number, curW: number, curH: number) => {
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
+    dragCTM.current = svg.getScreenCTM()?.inverse() ?? null;
+    const { x, y } = toSVG(e);
+    setSvgDrag({ type: 'printBoxResize', corner, sx: x, sy: y, ox: curX, oy: curY, initialW: curW, initialH: curH });
+  };
+
   const onSVGMove = (e: React.MouseEvent | MouseEvent) => {
     if (!svgDrag) return;
     const { x, y } = toSVG(e);
@@ -288,11 +341,52 @@ export function useCanvasInteractions(
       });
     } else if (svgDrag.type === 'pane') {
       setInfoPanePos({ x: svgDrag.ox + dx, y: svgDrag.oy + dy });
+    } else if (svgDrag.type === 'printBox') {
+      setPrintBoxPos({ x: svgDrag.ox + dx, y: svgDrag.oy + dy });
+    } else if (svgDrag.type === 'printBoxResize') {
+      const { corner, initialW, initialH } = svgDrag;
+      let newW = initialW;
+      let newH = initialH;
+      let newX = svgDrag.ox;
+      let newY = svgDrag.oy;
+      
+      const printAspect = printOrientation === 'landscape' ? 1800 / 1240 : 1200 / 1735;
+      
+      if (corner === 'br') {
+        newW = initialW + dx;
+        newH = newW / printAspect;
+      } else if (corner === 'tr') {
+        newW = initialW + dx;
+        newH = newW / printAspect;
+        newY = svgDrag.oy + initialH - newH;
+      } else if (corner === 'bl') {
+        newW = initialW - dx;
+        newH = newW / printAspect;
+        newX = svgDrag.ox + dx;
+      } else if (corner === 'tl') {
+        newW = initialW - dx;
+        newH = newW / printAspect;
+        newX = svgDrag.ox + dx;
+        newY = svgDrag.oy + initialH - newH;
+      }
+      
+      // Enforce a minimum width so it doesn't flip or become zero
+      if (newW > 200) {
+        setPrintBoxPos({ x: newX, y: newY });
+        const printVW = printOrientation === 'landscape' ? 1800 : 1200;
+        setPrintScale(newW / printVW);
+      }
     }
   };
 
   const onSVGUp = () => {
-    if (svgDrag && (svgDrag.type === 'layer' || svgDrag.type === 'arrowControl' || svgDrag.type === 'pane')) {
+    if (svgDrag && (
+      svgDrag.type === 'layer' || 
+      svgDrag.type === 'arrowControl' || 
+      svgDrag.type === 'pane' || 
+      svgDrag.type === 'printBox' || 
+      svgDrag.type === 'printBoxResize'
+    )) {
       commitHistory(stateRef.current);
     }
     setSvgDrag(null);
@@ -317,6 +411,8 @@ export function useCanvasInteractions(
     resetArrows,
     hiddenLayers,
     infoPanePos,
+    printBoxPos,
+    printScale,
     viewOff,
     svgDrag,
     snapGuides,
@@ -325,6 +421,8 @@ export function useCanvasInteractions(
     onLayerDown,
     onPaneDown,
     onArrowHandleDown,
+    onPrintBoxDown,
+    onPrintBoxResizeDown,
     onSVGMove,
     onSVGUp,
     toggleLayerVisibility,

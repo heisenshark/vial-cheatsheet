@@ -89,6 +89,8 @@ export function PrintCanvas({
     arrowMidpoints,
     resetArrows,
     infoPanePos,
+    printBoxPos,
+    printScale,
     viewOff,
     svgDrag,
     snapGuides,
@@ -97,6 +99,8 @@ export function PrintCanvas({
     onLayerDown,
     onPaneDown,
     onArrowHandleDown,
+    onPrintBoxDown,
+    onPrintBoxResizeDown,
     onSVGMove,
     onSVGUp,
     toggleLayerVisibility,
@@ -404,10 +408,10 @@ export function PrintCanvas({
   const VW = baseVW * printZoom;
   const VH = baseVH * printZoom;
 
-  const printBoxW = printOrientation === 'landscape' ? 1800 * printZoom : 1200 * printZoom;
-  const printBoxH = printOrientation === 'landscape' ? 1240 * printZoom : 1735 * printZoom;
-  const printBoxX = viewOff.x + (VW - printBoxW) / 2;
-  const printBoxY = viewOff.y + (VH - printBoxH) / 2;
+  const printBoxW = printOrientation === 'landscape' ? 1800 * printScale : 1200 * printScale;
+  const printBoxH = printOrientation === 'landscape' ? 1240 * printScale : 1735 * printScale;
+  const printBoxX = printBoxPos.x;
+  const printBoxY = printBoxPos.y;
   const activeViewBox = `${printBoxX} ${printBoxY} ${printBoxW} ${printBoxH}`;
 
   useEffect(() => {
@@ -486,11 +490,32 @@ export function PrintCanvas({
           </defs>
 
           {/* Print Boundary Overlay */}
-          <rect x={printBoxX} y={printBoxY} width={printBoxW} height={printBoxH} 
-            fill="none" stroke="var(--amber-500)" strokeWidth="4" strokeDasharray="12,12" 
-            rx="8" className="no-print" style={{ pointerEvents: 'none', opacity: 0.5 }} />
-          <text x={printBoxX + 10} y={printBoxY + 25} fill="var(--amber-500)" fontSize="16" fontWeight="bold" 
-            className="no-print" style={{ pointerEvents: 'none', opacity: 0.7 }}>Print Boundary (A4 {printOrientation})</text>
+          <g className="print-boundary-group">
+            {/* The Box */}
+            <rect x={printBoxX} y={printBoxY} width={printBoxW} height={printBoxH} 
+              fill="none" stroke="var(--amber-500)" strokeWidth="4" strokeDasharray="12,12" 
+              rx="8" className="no-print" style={{ pointerEvents: 'none', opacity: 0.5 }} />
+            
+            {/* The Draggable Header */}
+            <rect x={printBoxX} y={printBoxY} width={printBoxW} height={50} 
+              fill="var(--amber-500)" opacity={0.1} className="no-print"
+              style={{ cursor: 'move' }} onMouseDown={e => onPrintBoxDown(e, printBoxX, printBoxY)} />
+              
+            <text x={printBoxX + 15} y={printBoxY + 30} fill="var(--amber-500)" fontSize="18" fontWeight="bold" 
+              className="no-print" style={{ pointerEvents: 'none', opacity: 0.8 }}>
+              Print Boundary (A4 {printOrientation}) - Drag to Move
+            </text>
+
+            {/* Resize Handles */}
+            <circle cx={printBoxX} cy={printBoxY} r={12} fill="var(--amber-500)" className="no-print" style={{ cursor: 'nwse-resize' }} 
+              onMouseDown={e => onPrintBoxResizeDown(e, 'tl', printBoxX, printBoxY, printBoxW, printBoxH)} />
+            <circle cx={printBoxX + printBoxW} cy={printBoxY} r={12} fill="var(--amber-500)" className="no-print" style={{ cursor: 'nesw-resize' }} 
+              onMouseDown={e => onPrintBoxResizeDown(e, 'tr', printBoxX, printBoxY, printBoxW, printBoxH)} />
+            <circle cx={printBoxX} cy={printBoxY + printBoxH} r={12} fill="var(--amber-500)" className="no-print" style={{ cursor: 'nesw-resize' }} 
+              onMouseDown={e => onPrintBoxResizeDown(e, 'bl', printBoxX, printBoxY, printBoxW, printBoxH)} />
+            <circle cx={printBoxX + printBoxW} cy={printBoxY + printBoxH} r={12} fill="var(--amber-500)" className="no-print" style={{ cursor: 'nwse-resize' }} 
+              onMouseDown={e => onPrintBoxResizeDown(e, 'br', printBoxX, printBoxY, printBoxW, printBoxH)} />
+          </g>
 
           {/* Arrow shadows */}
           {!disableArrows && arrows.map((a, i) => (
