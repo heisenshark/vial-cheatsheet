@@ -18,11 +18,15 @@ export function useCanvasInteractions(
   setPrintZoom: React.Dispatch<React.SetStateAction<number>>,
   showInfoPane: boolean,
   combos?: any[],
-  tapDances?: any[]
+  tapDances?: any[],
+  hiddenLayersProp?: Record<number, boolean>,
+  setHiddenLayersProp?: React.Dispatch<React.SetStateAction<Record<number, boolean>>>
 ) {
   const [layerPositions, setLayerPos] = useState<Record<number, Point>>({});
   const [arrowMidpoints, setArrowMidpoints] = useState<Record<string, Point[]>>({});
-  const [hiddenLayers, setHiddenLayers] = useState<Record<number, boolean>>({});
+  const [hiddenLayersLocal, setHiddenLayersLocal] = useState<Record<number, boolean>>({});
+  const hiddenLayers = hiddenLayersProp ?? hiddenLayersLocal;
+  const setHiddenLayers = setHiddenLayersProp ?? setHiddenLayersLocal;
   const [infoPanePos, setInfoPanePos] = useState<Point>({ x: 0, y: 0 });
   const [viewOff, setViewOff] = useState<Point>({ x: -40, y: -40 });
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
@@ -151,7 +155,7 @@ export function useCanvasInteractions(
 
     svg.addEventListener('wheel', handleWheel, { passive: false });
     return () => svg.removeEventListener('wheel', handleWheel);
-  }, [setPrintZoom]);
+  }, [setPrintZoom, layerPositions, svgRef.current]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

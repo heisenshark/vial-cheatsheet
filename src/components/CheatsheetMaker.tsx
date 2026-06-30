@@ -19,6 +19,8 @@ export default function CheatsheetMaker() {
 
   const [selectedPreset, setSelectedPreset] = useState('split58');
   const [activeLayer, setActiveLayer] = useState<number | 'extras' | null>(null);
+  const [layerNames, setLayerNames] = useState<Record<number, string>>({});
+  const [hiddenLayers, setHiddenLayers] = useState<Record<number, boolean>>({});
 
   const [themeId, setThemeId] = useState('everforest');
   const unitSize = 50; // Constant keycap size
@@ -38,6 +40,11 @@ export default function CheatsheetMaker() {
   const [isDragging, setIsDragging] = useState(false);
   const [toast, setToast] = useState<{ type: string; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [canvasControls, setCanvasControls] = useState<{
+    hiddenLayers: Record<number, boolean>;
+    toggleLayerVisibility: (i: number) => void;
+  } | null>(null);
+  const [sidebarLayersCollapsed, setSidebarLayersCollapsed] = useState(false);
 
   const theme: Theme = (THEMES as any)[themeId];
   const ARROW_COLORS = ['#a7c080','#83c092','#7fbbb3','#d699b6','#dbbc7f','#e69875','#e67e80','#9da9a0'];
@@ -150,9 +157,18 @@ export default function CheatsheetMaker() {
     a.click();
   };
 
-  const layersToRender = activeLayer === null
+  const toggleLayerVisibility = (idx: number) => {
+    if (canvasControls) {
+      canvasControls.toggleLayerVisibility(idx);
+    } else {
+      setHiddenLayers(prev => ({ ...prev, [idx]: !prev[idx] }));
+    }
+  };
+
+  const layersToRender = (activeLayer === null
     ? mappedLayers.map((_, i) => i)
-    : typeof activeLayer === 'number' ? [activeLayer] : [];
+    : typeof activeLayer === 'number' ? [activeLayer] : [])
+    .filter(i => !hiddenLayers[i]);
 
   const hasExtras = combos.length > 0 || tapDances.length > 0;
 
@@ -272,6 +288,11 @@ export default function CheatsheetMaker() {
                 tapDances={tapDances}
                 showInfoPane={showInfoPane}
                 setShowInfoPane={setShowInfoPane}
+                layerNames={layerNames}
+                setLayerNames={setLayerNames}
+                hiddenLayers={hiddenLayers}
+                setHiddenLayers={setHiddenLayers}
+                onRegisterControls={setCanvasControls}
               />
             </div>
           ) : (
@@ -288,7 +309,7 @@ export default function CheatsheetMaker() {
                 {layersToRender.map(i => (
                   <div key={i} className="layer-card">
                     <div className="layer-header">
-                      <h3>Layer {i}</h3>
+                      <h3>{layerNames[i] ?? `Layer ${i}`}</h3>
                       <button className="btn btn-secondary btn-sm" onClick={() => downloadSVG(i)}>Download SVG</button>
                     </div>
                     <div className="layer-svg-container">
@@ -395,6 +416,71 @@ export default function CheatsheetMaker() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="glass-card panel">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setSidebarLayersCollapsed(!sidebarLayersCollapsed)}>
+              <h3 style={{ margin: 0 }}>Layers & Panels</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--slate-400)' }}>{sidebarLayersCollapsed ? '▼' : '▲'}</span>
+            </div>
+            {!sidebarLayersCollapsed && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                {mappedLayers.map((_, i) => {
+                  const isVisible = !hiddenLayers[i];
+                  const layerColor = ARROW_COLORS[i % 8];
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <label className="toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={() => toggleLayerVisibility(i)}
+                        />
+                        <span 
+                          className="toggle-slider" 
+                          style={{
+                            backgroundColor: isVisible ? layerColor : undefined,
+                            borderColor: isVisible ? layerColor : undefined
+                          }}
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={layerNames[i] ?? `Layer ${i}`}
+                        onChange={e => setLayerNames(prev => ({ ...prev, [i]: e.target.value }))}
+                        placeholder={`Layer ${i}`}
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          fontSize: '0.85rem',
+                          padding: '4px 8px',
+                          flex: 1,
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                
+                {showInfoPane !== undefined && (
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#fff', userSelect: 'none', fontWeight: 600 }}>
+                      Info Pane
+                    </span>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={showInfoPane}
+                        onChange={e => setShowInfoPane(e.target.checked)}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="glass-card panel">

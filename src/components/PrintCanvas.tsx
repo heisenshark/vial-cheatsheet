@@ -27,6 +27,10 @@ interface PrintCanvasProps {
   tapDances?: any[];
   showInfoPane?: boolean;
   setShowInfoPane: React.Dispatch<React.SetStateAction<boolean>>;
+  layerNames: Record<number, string>;
+  setLayerNames: React.Dispatch<React.SetStateAction<Record<number, string>>>;
+  hiddenLayers: Record<number, boolean>;
+  setHiddenLayers: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
 }
 
 function getBoxIntersection(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Point {
@@ -66,13 +70,16 @@ export function PrintCanvas({
   combos = [],
   tapDances = [],
   showInfoPane,
-  setShowInfoPane
+  setShowInfoPane,
+  layerNames,
+  setLayerNames,
+  hiddenLayers,
+  setHiddenLayers
 }: PrintCanvasProps) {
   const {
     layerPositions,
     arrowMidpoints,
     resetArrows,
-    hiddenLayers,
     infoPanePos,
     viewOff,
     svgDrag,
@@ -86,7 +93,7 @@ export function PrintCanvas({
     onSVGUp,
     toggleLayerVisibility,
     fitVisibleToPage
-  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances);
+  } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances, hiddenLayers, setHiddenLayers);
 
   const CPU = unitSize;
   const CPG = keyGap;
@@ -332,6 +339,7 @@ export function PrintCanvas({
 
   // Measure actual SVG-space positions of layer-trigger keycaps inside the foreignObject
   const [paneKeyPositions, setPaneKeyPositions] = useState<Record<string, {x: number, y: number, w: number, h: number}>>({});
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -393,21 +401,7 @@ export function PrintCanvas({
 
   return (
     <>
-      <div className="no-print checkboxes-row" style={{ padding: '0.5rem 1rem', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', marginBottom: '10px', gap: '1rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.85rem', color: 'var(--slate-400)', fontWeight: 600 }}>Visible Layers:</span>
-        {mappedLayers.map((_, i) => (
-          <label key={i} className="checkbox-label" style={{ margin: 0 }}>
-            <input type="checkbox" checked={!hiddenLayers[i]} onChange={() => toggleLayerVisibility(i)} />
-            <span>Layer {i}</span>
-          </label>
-        ))}
-        <label className="checkbox-label" style={{ margin: 0, marginLeft: 'auto' }}>
-          <input type="checkbox" checked={showInfoPane} onChange={e => setShowInfoPane(e.target.checked)} />
-          <span>Info Pane</span>
-        </label>
-      </div>
-
-      <div className="canvas-hint no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="canvas-hint no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <span>🖱 Drag keyboards to arrange (snaps to align) · Drag 3 points on arrows to bend · Drag background/wheel to pan · Ctrl+Wheel to zoom</span>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-secondary btn-sm" onClick={fitVisibleToPage} style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }} title="Scale and center all visible layers to fit on one page">
@@ -476,7 +470,7 @@ export function PrintCanvas({
                 <text x={kbW / 2} y={CLABEL * 0.68}
                   textAnchor="middle" fontSize={13} fontWeight="800"
                   fill={colorLayerButtons ? '#121212' : (theme.id === 'mono_print' ? '#000000' : arrowColors[layerIdx % 8])} style={{ userSelect: 'none', pointerEvents: 'none' }}
-                >Layer {layerIdx}</text>
+                >{layerNames[layerIdx] ?? `Layer ${layerIdx}`}</text>
                 
                 <g className="no-print" style={{ cursor: 'pointer' }}
                   onMouseDown={e => { e.stopPropagation(); toggleLayerVisibility(layerIdx); }}
