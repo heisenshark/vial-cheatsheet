@@ -4,6 +4,19 @@ import { translateKeycode } from '../keycodes';
 import { formatLabel, solveCatmullRom, getTargetLayer } from '../utils';
 import type { Theme, ParsedKey } from '../types';
 
+function distanceToSegment(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(x - ax, y - ay);
+  }
+  let t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  const px = ax + t * dx;
+  const py = ay + t * dy;
+  return Math.hypot(x - px, y - py);
+}
+
 interface PrintCanvasProps {
   mappedLayers: ParsedKey[][];
   parsedKeys: ParsedKey[];
@@ -105,7 +118,9 @@ export function PrintCanvas({
     onSVGUp,
     toggleLayerVisibility,
     fitVisibleToPage,
-    gridLayoutVisibleLayers
+    gridLayoutVisibleLayers,
+    addArrowPoint,
+    deleteArrowPoint
   } = useCanvasInteractions(mappedLayers, parsedKeys, unitSize, keyGap, printOrientation, printZoom, setPrintZoom, !!showInfoPane, combos, tapDances, hiddenLayers, setHiddenLayers);
 
   useEffect(() => {
@@ -118,6 +133,42 @@ export function PrintCanvas({
       canResetArrows: Object.keys(arrowMidpoints).length > 0
     });
   }, [hiddenLayers, toggleLayerVisibility, fitVisibleToPage, gridLayoutVisibleLayers, resetArrows, arrowMidpoints, onRegisterControls]);
+
+  const handlePathDoubleClick = (
+    e: React.MouseEvent,
+    arrowId: string,
+    sx: number,
+    sy: number,
+    ex: number,
+    ey: number,
+    currentPts: any[]
+  ) => {
+    if (e.ctrlKey || e.metaKey) return;
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
+    
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const transformed = pt.matrixTransform(svg.getScreenCTM()?.inverse() || svg.getScreenCTM()?.inverse()!);
+    const mx = transformed.x;
+    const my = transformed.y;
+
+    const allPts = [{ x: sx, y: sy }, ...currentPts, { x: ex, y: ey }];
+    let bestIndex = 0;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < allPts.length - 1; i++) {
+      const dist = distanceToSegment(mx, my, allPts[i].x, allPts[i].y, allPts[i + 1].x, allPts[i + 1].y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestIndex = i;
+      }
+    }
+
+    addArrowPoint(arrowId, { x: mx, y: my }, bestIndex);
+  };
 
   const CPU = unitSize;
   const CPG = keyGap;
@@ -245,32 +296,34 @@ export function PrintCanvas({
         const tkCy = tp.y + (k.y + CPAD + k.h / 2) * CPU + CLABEL;
 
         const arrowId = `${layerIdx}-to-${to}`;
-        const custom = arrowMidpoints[arrowId];
+        const data = arrowMidpoints[arrowId];
+        const hasCustom = data !== undefined;
+        const storedPts = data?.pts;
 
-        // Start: snap to nearest edge of the KEY box on origin layer
-        const startAimX = (custom && custom[3]) ? custom[3].x : tkCx;
-        const startAimY = (custom && custom[3]) ? custom[3].y : tkCy;
-        const startPt = getBoxIntersection(kCx, kCy, kW, kH, startAimX, startAimY);
+        // Default mathematical midpoint of straight line
+        const mx2 = (kCx + tCx) / 2;
+        const my2 = (kCy + tCy) / 2;
+        const tempPts = (hasCustom && storedPts) ? storedPts : [{ x: mx2, y: my2 }];
+
+        // Start snaps towards custom startAim if set, else first midpoint
+        const startAim = data?.startAim ? data.startAim : (tempPts.length > 0 ? tempPts[0] : { x: tCx, y: tCy });
+        const startPt = getBoxIntersection(kCx, kCy, kW, kH, startAim.x, startAim.y);
         const sx = startPt.x, sy = startPt.y;
 
-        // End: snap to nearest edge of target layer box
-        const endAimX = (custom && custom[4]) ? custom[4].x : kCx;
-        const endAimY = (custom && custom[4]) ? custom[4].y : kCy;
-        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAimX, endAimY);
+        // End snaps towards custom endAim if set, else last midpoint
+        const endAim = data?.endAim ? data.endAim : (tempPts.length > 0 ? tempPts[tempPts.length - 1] : { x: kCx, y: kCy });
+        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAim.x, endAim.y);
         const ex = endPt.x, ey = endPt.y;
 
-        const dx = ex - sx, dy = ey - sy;
-        const c1x = sx + dx * 0.25, c1y = sy + dy * 0.25;
-        const c2x = ex - dx * 0.25, c2y = ey - dy * 0.25;
-        const mx2 = (c1x + c2x) / 2, my2 = (c1y + c2y) / 2;
-
-        const p0 = (custom && custom[0]) ? custom[0] : { x: c1x, y: c1y };
-        const p1 = (custom && custom[1]) ? custom[1] : { x: mx2, y: my2 };
-        const p2 = (custom && custom[2]) ? custom[2] : { x: c2x, y: c2y };
+        // If user hasn't customized it, calculate fresh center based on snapped positions
+        const finalPts = (hasCustom && storedPts)
+          ? storedPts
+          : [{ x: (sx + ex) / 2, y: (sy + ey) / 2 }];
 
         arrows.push({
           arrowId, fromLayer: layerIdx, toLayer: to,
-          sx, sy, ex, ey, p0, p1, p2,
+          sx, sy, ex, ey, pts: finalPts,
+          startAim, endAim,
           color: (theme.id === 'mono_print' && !colorLayerButtons) ? '#000000' : arrowColors[to % 8]
         });
       });
@@ -361,12 +414,20 @@ export function PrintCanvas({
         const tCx = tp.x + kbW / 2;
         const tCy = tp.y + (kbH + CLABEL) / 2;
 
-        const custom = arrowMidpoints[arrowId];
         const measured = computedPanePositions[arrowId];
+        const data = arrowMidpoints[arrowId];
+        const hasCustom = data !== undefined;
+        const storedPts = data?.pts;
+
+        // Default mathematical midpoint of straight line
+        const mx2 = (measured ? (measured.x + tCx) / 2 : (paneCx + tCx) / 2);
+        const my2 = (measured ? (measured.y + tCy) / 2 : (paneCy + tCy) / 2);
+        const tempPts = (hasCustom && storedPts) ? storedPts : [{ x: mx2, y: my2 }];
+
         let sx: number, sy: number;
+        const startAim = data?.startAim ? data.startAim : (tempPts.length > 0 ? tempPts[0] : { x: tCx, y: tCy });
         if (measured) {
-          const aimed = (custom && custom[3]) ? custom[3] : { x: tCx, y: tCy };
-          const edge = getBoxIntersection(measured.x, measured.y, measured.w, measured.h, aimed.x, aimed.y);
+          const edge = getBoxIntersection(measured.x, measured.y, measured.w, measured.h, startAim.x, startAim.y);
           sx = edge.x;
           sy = edge.y;
         } else {
@@ -375,23 +436,19 @@ export function PrintCanvas({
         }
 
         // End: snap to nearest edge of target layer box
-        const endAimX = (custom && custom[4]) ? custom[4].x : paneCx;
-        const endAimY = (custom && custom[4]) ? custom[4].y : paneCy;
-        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAimX, endAimY);
+        const endAim = data?.endAim ? data.endAim : (tempPts.length > 0 ? tempPts[tempPts.length - 1] : { x: paneCx, y: paneCy });
+        const endPt = getBoxIntersection(tCx, tCy, kbW, kbH + CLABEL, endAim.x, endAim.y);
         const ex = endPt.x, ey = endPt.y;
 
-        const dx = ex - sx, dy = ey - sy;
-        const c1x = sx + dx * 0.25, c1y = sy + dy * 0.25;
-        const c2x = ex - dx * 0.25, c2y = ey - dy * 0.25;
-        const mx2 = (c1x + c2x) / 2, my2 = (c1y + c2y) / 2;
-
-        const p0 = (custom && custom[0]) ? custom[0] : { x: c1x, y: c1y };
-        const p1 = (custom && custom[1]) ? custom[1] : { x: mx2, y: my2 };
-        const p2 = (custom && custom[2]) ? custom[2] : { x: c2x, y: c2y };
+        // Rebuild center if not customized
+        const finalPts = (hasCustom && storedPts)
+          ? storedPts
+          : [{ x: (sx + ex) / 2, y: (sy + ey) / 2 }];
 
         arrows.push({
           arrowId, fromLayer: -1, toLayer: to,
-          sx, sy, ex, ey, p0, p1, p2,
+          sx, sy, ex, ey, pts: finalPts,
+          startAim, endAim,
           color: (theme.id === 'mono_print' && !colorLayerButtons) ? '#000000' : arrowColors[to % 8]
         });
       });
@@ -521,7 +578,7 @@ export function PrintCanvas({
 
           {/* Arrow shadows */}
           {!disableArrows && arrows.map((a, i) => (
-            <path key={`as${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ])}
+            <path key={`as${i}`} d={solveCatmullRom([ {x: a.sx, y: a.sy}, ...a.pts, {x: a.ex, y: a.ey} ])}
               fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth={arrowWidth + 1} className="no-print" />
           ))}
 
@@ -736,11 +793,19 @@ export function PrintCanvas({
           {/* Arrows and Draggable Handles */}
           {!disableArrows && arrows.map((a, i) => {
             const isDraggingThis = svgDrag && svgDrag.type === 'arrowControl' && (svgDrag as any).arrowId === a.arrowId;
-            const splinePath = solveCatmullRom([ {x: a.sx, y: a.sy}, a.p0, a.p1, a.p2, {x: a.ex, y: a.ey} ]);
+            const splinePath = solveCatmullRom([ {x: a.sx, y: a.sy}, ...a.pts, {x: a.ex, y: a.ey} ]);
             return (
               <g key={`arrow-group-${i}`} className="arrow-interactive-group">
-                {/* Thick invisible hitbox to catch hover */}
-                <path d={splinePath} fill="none" stroke="transparent" strokeWidth={30} style={{ pointerEvents: 'stroke' }} className="no-print" />
+                {/* Thick invisible hitbox to catch hover and add points */}
+                <path 
+                  d={splinePath} 
+                  fill="none" 
+                  stroke="transparent" 
+                  strokeWidth={30} 
+                  style={{ pointerEvents: 'stroke', cursor: 'default' }} 
+                  className="no-print" 
+                  onDoubleClick={e => handlePathDoubleClick(e, a.arrowId, a.sx, a.sy, a.ex, a.ey, a.pts)}
+                />
                 
                 {/* The visible arrow */}
                 <path d={splinePath} fill="none" stroke={a.color} strokeWidth={arrowWidth} markerEnd={`url(#arrowhead-${a.color.replace('#','')})`} />
@@ -749,31 +814,67 @@ export function PrintCanvas({
                 <g className="no-print">
                   {isDraggingThis && (
                     <g style={{ pointerEvents: 'none' }} opacity={0.45}>
-                      <line x1={a.sx} y1={a.sy} x2={a.p0.x} y2={a.p0.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                      <line x1={a.p0.x} y1={a.p0.y} x2={a.p1.x} y2={a.p1.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                      <line x1={a.p1.x} y1={a.p1.y} x2={a.p2.x} y2={a.p2.y} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
-                      <line x1={a.p2.x} y1={a.p2.y} x2={a.ex} y2={a.ey} stroke={a.color} strokeWidth={1} strokeDasharray="3 3" />
+                      {(() => {
+                        const points = [{ x: a.sx, y: a.sy }, ...a.pts, { x: a.ex, y: a.ey }];
+                        return points.slice(0, -1).map((p, idx) => (
+                          <line
+                            key={`guide-${idx}`}
+                            x1={p.x}
+                            y1={p.y}
+                            x2={points[idx + 1].x}
+                            y2={points[idx + 1].y}
+                            stroke={a.color}
+                            strokeWidth={1}
+                            strokeDasharray="3 3"
+                          />
+                        ));
+                      })()}
                     </g>
                   )}
                   
-                  {/* Middle point ALWAYS visible */}
-                  <circle cx={a.p1.x} cy={a.p1.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 1, a.p1.x, a.p1.y)} />
-                  <circle cx={a.p1.x} cy={a.p1.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                  {/* Point handles (all interactive, Ctrl+Click to delete) */}
+                  {a.pts.map((p, idx) => (
+                    <g key={`handle-${idx}`}>
+                      <circle 
+                        cx={p.x} 
+                        cy={p.y} 
+                        r={20} 
+                        fill="transparent" 
+                        style={{ cursor: 'move' }} 
+                        onMouseDown={e => {
+                          if (e.ctrlKey || e.metaKey) {
+                            e.stopPropagation();
+                            deleteArrowPoint(a.arrowId, idx);
+                          } else {
+                            onArrowHandleDown(e, a.arrowId, idx, p.x, p.y);
+                          }
+                        }} 
+                      />
+                      <circle cx={p.x} cy={p.y} r={7} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                    </g>
+                  ))}
 
-                  {/* Secondary points (hidden unless hovered) */}
+                  {/* Start/End boundary control points (only visible when arrow is hovered) */}
                   <g className={`secondary-handle ${isDraggingThis ? 'dragging' : ''}`}>
-                    <circle cx={a.p0.x} cy={a.p0.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 0, a.p0.x, a.p0.y)} />
-                    <circle cx={a.p0.x} cy={a.p0.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                    <circle 
+                      cx={a.sx} 
+                      cy={a.sy} 
+                      r={20} 
+                      fill="transparent" 
+                      style={{ cursor: 'move' }} 
+                      onMouseDown={e => onArrowHandleDown(e, a.arrowId, -1, a.startAim.x, a.startAim.y)} 
+                    />
+                    <circle cx={a.sx} cy={a.sy} r={7} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
 
-                    <circle cx={a.p2.x} cy={a.p2.y} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 2, a.p2.x, a.p2.y)} />
-                    <circle cx={a.p2.x} cy={a.p2.y} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                    {/* Start handle: clamped to keycap boundary for pane arrows, free for regular arrows */}
-                    <circle cx={a.sx} cy={a.sy} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 3, a.sx, a.sy)} />
-                    <circle cx={a.sx} cy={a.sy} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
-
-                    <circle cx={a.ex} cy={a.ey} r={12} fill="transparent" style={{ cursor: 'move' }} onMouseDown={e => onArrowHandleDown(e, a.arrowId, 4, a.ex, a.ey)} />
-                    <circle cx={a.ex} cy={a.ey} r={5} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                    <circle 
+                      cx={a.ex} 
+                      cy={a.ey} 
+                      r={20} 
+                      fill="transparent" 
+                      style={{ cursor: 'move' }} 
+                      onMouseDown={e => onArrowHandleDown(e, a.arrowId, -2, a.endAim.x, a.endAim.y)} 
+                    />
+                    <circle cx={a.ex} cy={a.ey} r={7} fill={a.color} stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
                   </g>
                 </g>
               </g>

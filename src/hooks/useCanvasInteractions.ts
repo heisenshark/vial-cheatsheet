@@ -1,9 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ParsedKey, DragState, SnapGuide, Point } from '../types';
 
+export interface ArrowMidpointData {
+  pts: Point[];
+  startAim?: Point;
+  endAim?: Point;
+}
+
 interface HistoryState {
   layerPositions: Record<number, Point>;
-  arrowMidpoints: Record<string, Point[]>;
+  arrowMidpoints: Record<string, ArrowMidpointData>;
   hiddenLayers: Record<number, boolean>;
   infoPanePos: Point;
   printBoxPos?: Point;
@@ -26,7 +32,7 @@ export function useCanvasInteractions(
   setHiddenLayersProp?: React.Dispatch<React.SetStateAction<Record<number, boolean>>>
 ) {
   const [layerPositions, setLayerPos] = useState<Record<number, Point>>({});
-  const [arrowMidpoints, setArrowMidpoints] = useState<Record<string, Point[]>>({});
+  const [arrowMidpoints, setArrowMidpoints] = useState<Record<string, ArrowMidpointData>>({});
   const [hiddenLayersLocal, setHiddenLayersLocal] = useState<Record<number, boolean>>({});
   const hiddenLayers = hiddenLayersProp ?? hiddenLayersLocal;
   const setHiddenLayers = setHiddenLayersProp ?? setHiddenLayersLocal;
@@ -304,13 +310,27 @@ export function useCanvasInteractions(
     setSvgDrag({ type: 'pane', sx: x, sy: y, ox: infoPanePos.x, oy: infoPanePos.y });
   };
 
-  const onArrowHandleDown = (e: React.MouseEvent, arrowId: string, pointIndex: number, curX: number, curY: number) => {
+  const onArrowHandleDown = (
+    e: React.MouseEvent,
+    arrowId: string,
+    pointIndex: number,
+    curX: number,
+    curY: number
+  ) => {
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
     dragCTM.current = svg.getScreenCTM()?.inverse() ?? null;
     const { x, y } = toSVG(e);
-    setSvgDrag({ type: 'arrowControl', arrowId, pointIndex, sx: x, sy: y, ox: curX, oy: curY });
+    setSvgDrag({
+      type: 'arrowControl',
+      arrowId,
+      pointIndex,
+      sx: x,
+      sy: y,
+      ox: curX,
+      oy: curY
+    });
   };
 
   const onPrintBoxDown = (e: React.MouseEvent, curX: number, curY: number) => {
@@ -363,10 +383,19 @@ export function useCanvasInteractions(
     } else if (svgDrag.type === 'arrowControl') {
       const nx = svgDrag.ox + dx;
       const ny = svgDrag.oy + dy;
+
       setArrowMidpoints(prev => {
-        const arr = prev[svgDrag.arrowId] ? [...prev[svgDrag.arrowId]] : [];
-        arr[svgDrag.pointIndex] = { x: nx, y: ny };
-        return { ...prev, [svgDrag.arrowId]: arr };
+        const data = prev[svgDrag.arrowId] ? { ...prev[svgDrag.arrowId] } : { pts: [] };
+        if (svgDrag.pointIndex === -1) {
+          data.startAim = { x: nx, y: ny };
+        } else if (svgDrag.pointIndex === -2) {
+          data.endAim = { x: nx, y: ny };
+        } else {
+          const nextPts = [...data.pts];
+          nextPts[svgDrag.pointIndex] = { x: nx, y: ny };
+          data.pts = nextPts;
+        }
+        return { ...prev, [svgDrag.arrowId]: data };
       });
     } else if (svgDrag.type === 'pane') {
       setInfoPanePos({ x: svgDrag.ox + dx, y: svgDrag.oy + dy });
@@ -429,6 +458,28 @@ export function useCanvasInteractions(
     commitHistory({ ...stateRef.current, hiddenLayers: nextHidden });
   }, [setHiddenLayers, commitHistory]);
 
+  const addArrowPoint = useCallback((arrowId: string, pt: Point, insertIndex: number) => {
+    setArrowMidpoints(prev => {
+      const data = prev[arrowId] ? { ...prev[arrowId] } : { pts: [] };
+      const nextPts = [...data.pts];
+      nextPts.splice(insertIndex, 0, pt);
+      const next = { ...prev, [arrowId]: { ...data, pts: nextPts } };
+      commitHistory({ ...stateRef.current, arrowMidpoints: next });
+      return next;
+    });
+  }, [commitHistory]);
+
+  const deleteArrowPoint = useCallback((arrowId: string, pointIndex: number) => {
+    setArrowMidpoints(prev => {
+      const data = prev[arrowId] ? { ...prev[arrowId] } : { pts: [] };
+      const nextPts = [...data.pts];
+      nextPts.splice(pointIndex, 1);
+      const next = { ...prev, [arrowId]: { ...data, pts: nextPts } };
+      commitHistory({ ...stateRef.current, arrowMidpoints: next });
+      return next;
+    });
+  }, [commitHistory]);
+
   const resetArrows = useCallback(() => {
     setArrowMidpoints({});
     commitHistory({ ...stateRef.current, arrowMidpoints: {} });
@@ -456,6 +507,8 @@ export function useCanvasInteractions(
     onSVGUp,
     toggleLayerVisibility,
     fitVisibleToPage,
-    gridLayoutVisibleLayers
+    gridLayoutVisibleLayers,
+    addArrowPoint,
+    deleteArrowPoint
   };
 }
