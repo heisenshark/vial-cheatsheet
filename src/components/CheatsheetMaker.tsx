@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PRESETS } from '../presets';
 import { parseKLE, mapLayersToLayout } from '../kleParser';
 import { THEMES } from '../themes';
-import { comboKeyLabel } from '../utils';
 import type { ParsedKey, Theme, Combo, TapDance } from '../types';
 
 import { PrintCanvas } from './PrintCanvas';
+
 
 export default function CheatsheetMaker() {
   const [parsedKeys, setParsedKeys] = useState<ParsedKey[]>([]);
@@ -20,6 +20,12 @@ export default function CheatsheetMaker() {
   const [layerNames, setLayerNames] = useState<Record<number, string>>({});
   const [hiddenLayers, setHiddenLayers] = useState<Record<number, boolean>>({});
 
+  const [rawBackupData, setRawBackupData] = useState<any>(null);
+  const [rawBackupName, setRawBackupName] = useState<string>('');
+  const [customLayout, setCustomLayout] = useState<{
+    keys: ParsedKey[];
+    matrix: { rows: number; cols: number };
+  } | null>(null);
   const [themeId, setThemeId] = useState('everforest');
   const unitSize = 50; // Constant keycap size
   const [keyGap, setKeyGap] = useState(3);
@@ -38,6 +44,7 @@ export default function CheatsheetMaker() {
   const [isDragging, setIsDragging] = useState(false);
   const [toast, setToast] = useState<{ type: string; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const defFileInputRef = useRef<HTMLInputElement>(null);
   const [canvasControls, setCanvasControls] = useState<{
     hiddenLayers: Record<number, boolean>;
     toggleLayerVisibility: (i: number) => void;
@@ -130,63 +137,236 @@ export default function CheatsheetMaker() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const parseVilFile = (text: string, name: string) => {
-    try {
-      const data = JSON.parse(text);
-      if (!data.layout || !Array.isArray(data.layout)) {
-        showToast('error', 'Unrecognised format — expected a Vial .vil export.');
-        return;
+  const detectPresetKey = (data: any): string => {
+    if (data.layout && Array.isArray(data.layout) && data.layout[0]) {
+      const rows = data.layout[0].length;
+      const cols = data.layout[0][0]?.length ?? 0;
+      for (const [key, preset] of Object.entries(PRESETS)) {
+        if ((preset as any).matrix && (preset as any).matrix.rows === rows && (preset as any).matrix.cols === cols) {
+          return key;
+        }
+      }
+    }
+
+    let flatLayerLength = 0;
+    if (data.layout && Array.isArray(data.layout)) {
+      flatLayerLength = data.layout[0].flat().length;
+    } else if (data.layers && Array.isArray(data.layers) && data.layers[0]) {
+      flatLayerLength = data.layers[0].length;
+    }
+
+    if (flatLayerLength > 0) {
+      for (const [key, preset] of Object.entries(PRESETS)) {
+        if ((preset as any).matrix) {
+          const presetTotal = (preset as any).matrix.rows * (preset as any).matrix.cols;
+          if (presetTotal === flatLayerLength) {
+            return key;
+          }
+        }
+      }
+    }
+
+    return 'custom';
+  };
+
+  const rebuildLayout = (presetKey: string, backup: any, customL: typeof customLayout) => {
+    let keys: ParsedKey[] = [];
+    let matrix = { rows: 0, cols: 0 };
+
+    if (presetKey === 'custom' && customL) {
+      keys = customL.keys;
+      matrix = customL.matrix;
+    } else {
+      const preset = (PRESETS as any)[presetKey];
+      if (preset) {
+        matrix = preset.matrix;
+        keys = parseKLE(preset.keymap);
+      }
+    }
+
+    if (keys.length === 0) {
+      // Default fallback
+      const preset = (PRESETS as any)['split58'];
+      matrix = preset.matrix;
+      keys = parseKLE(preset.keymap);
+    }
+
+    let flatLayers: any[][] = [];
+    if (backup) {
+      if (backup.layout && Array.isArray(backup.layout)) {
+        flatLayers = backup.layout.map((layer: any[]) => layer.flat().map(k => k === -1 ? '__PHANTOM__' : k));
+      } else if (backup.layers && Array.isArray(backup.layers)) {
+        flatLayers = backup.layers.map((layer: any[]) => layer.map(k => k === -1 ? '__PHANTOM__' : k));
       }
 
-      const flatLayers = data.layout.map((layer: any[]) =>
-        layer.flat().map(k => (k === -1 ? '__PHANTOM__' : k))
-      );
+      // If presetKey is custom and we have no customLayout JSON, generate a rectangular grid of 1x1 keycaps
+      if (presetKey === 'custom' && !customL) {
+        if (backup.layout && Array.isArray(backup.layout) && backup.layout[0]) {
+          const rows = backup.layout[0].length;
+          const cols = backup.layout[0][0]?.length ?? 0;
+          matrix = { rows, cols };
+          keys = [];
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              keys.push({
+                x: c, y: r, w: 1, h: 1, label: `${r},${c}`, r: 0, rx: 0, ry: 0
+              });
+            }
+          }
+        } else if (backup.layers && Array.isArray(backup.layers) && backup.layers[0]) {
+          const totalKeys = backup.layers[0].length;
+          let cols = 15;
+          if (backup.matrix && backup.matrix.cols !== undefined) {
+            cols = backup.matrix.cols;
+          } else {
+            if (totalKeys <= 40) cols = 10;
+            else if (totalKeys <= 50) cols = 12;
+            else if (totalKeys <= 70) cols = 15;
+            else if (totalKeys <= 90) cols = 16;
+            else cols = 20;
+          }
+          const rows = Math.ceil(totalKeys / cols);
+          matrix = { rows, cols };
+          keys = [];
+          for (let i = 0; i < totalKeys; i++) {
+            const r = Math.floor(i / cols);
+            const c = i % cols;
+            keys.push({
+              x: c, y: r, w: 1, h: 1, label: `${r},${c}`, r: 0, rx: 0, ry: 0
+            });
+          }
+        }
+      }
+    } else {
+      const preset = (PRESETS as any)[presetKey];
+      if (preset && preset.defaultLayers && preset.defaultLayers.length > 0) {
+        flatLayers = [preset.defaultLayers];
+      }
+    }
 
-      const numRows = data.layout[0].length;
-      const numCols = data.layout[0][0]?.length ?? 6;
-      const matrix = { rows: numRows, cols: numCols };
+    setParsedKeys(keys);
+    setMappedLayers(mapLayersToLayout(keys, flatLayers, matrix));
 
-      const presetKey = (numRows === 10 && numCols === 6) ? 'split58' : selectedPreset;
-      setSelectedPreset(presetKey);
-
-      const keys = parseKLE((PRESETS as any)[presetKey].keymap);
-      const mapped = mapLayersToLayout(keys, flatLayers, matrix);
-
-      setParsedKeys(keys);
-      setMappedLayers(mapped);
-
-      if (data.combo) {
-        const active = data.combo
+    if (backup) {
+      if (backup.combo) {
+        const active = backup.combo
           .map((c: any[], i: number) => ({ idx: i, keys: c.slice(0, 4), action: c[4] }))
           .filter((c: Combo) => c.action && c.action !== 'KC_NO' && c.keys.some(k => k && k !== 'KC_NO'));
         setCombos(active);
+      } else {
+        setCombos([]);
       }
 
-      if (data.tap_dance) {
-        const active = data.tap_dance
-          .map((td: any[], i: number) => ({
-            idx: i, tap: td[0], hold: td[1], doubleTap: td[2], tapHold: td[3], term: td[4]
-          }))
+      if (backup.tap_dance) {
+        const active = backup.tap_dance
+          .map((td: any[], i: number) => ({ idx: i, tap: td[0], hold: td[1], doubleTap: td[2], tapHold: td[3], term: td[4] }))
           .filter((td: TapDance) => [td.tap, td.hold, td.doubleTap, td.tapHold].some(k => k && k !== 'KC_NO'));
         setTapDances(active);
-        setTapDances(active);
+      } else {
+        setTapDances([]);
       }
 
-      const info: any = { name: name.replace(/\.vil$/i, '') };
-      if (data.settings) {
-        if (data.settings["4"] !== undefined) info.tappingTerm = data.settings["4"];
-        if (data.settings["7"] !== undefined) info.comboTerm = data.settings["7"];
-        if (data.settings["25"] !== undefined) info.oneshotTimeout = data.settings["25"];
+      const info: any = { name: rawBackupName.replace(/\.(vil|json)$/i, '') || 'Default' };
+      if (backup.settings) {
+        if (backup.settings['4'] !== undefined) info.tappingTerm = backup.settings['4'];
+        if (backup.settings['7'] !== undefined) info.comboTerm = backup.settings['7'];
+        if (backup.settings['25'] !== undefined) info.oneshotTimeout = backup.settings['25'];
       }
       setLayoutInfo(info);
+    } else {
+      setCombos([]);
+      setTapDances([]);
+      setLayoutInfo({ name: 'Default' });
+    }
+  };
 
-      showToast('success', `Loaded "${name}" — ${flatLayers.length} layers, ${keys.length} keys`);
+  useEffect(() => {
+    rebuildLayout(selectedPreset, rawBackupData, customLayout);
+  }, [selectedPreset, rawBackupData, customLayout]);
+
+  const parseDefFile = (text: string, name: string) => {
+    try {
+      const defData = JSON.parse(text);
+      let keymapData: any[] | null = null;
+      let keys: ParsedKey[] = [];
+      let matrix = { rows: 0, cols: 0 };
+
+      if (Array.isArray(defData.layouts)) {
+        keymapData = defData.layouts;
+      } else if (defData.layouts?.keymap && Array.isArray(defData.layouts.keymap)) {
+        keymapData = defData.layouts.keymap;
+      } else if (defData.layouts) {
+        const layoutName = Object.keys(defData.layouts)[0];
+        const layoutObj = layoutName ? defData.layouts[layoutName] : null;
+        if (layoutObj?.layout && Array.isArray(layoutObj.layout)) {
+          keys = layoutObj.layout.map((k: any) => ({
+            x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 1, h: k.h ?? 1,
+            label: k.matrix ? `${k.matrix[0]},${k.matrix[1]}` : '0,0',
+            r: 0, rx: 0, ry: 0
+          }));
+        }
+      }
+
+      if (keymapData) keys = parseKLE(keymapData);
+
+      if (keys.length === 0) {
+        showToast('error', 'Could not parse keys from the definition file.');
+        return;
+      }
+
+      if (defData.matrix?.rows !== undefined) {
+        matrix = { rows: defData.matrix.rows, cols: defData.matrix.cols ?? 12 };
+      } else {
+        let maxRow = 0, maxCol = 0;
+        keys.forEach(k => {
+          const [r, c] = k.label.split(',').map(Number);
+          if (!isNaN(r)) { maxRow = Math.max(maxRow, r); maxCol = Math.max(maxCol, c); }
+        });
+        matrix = { rows: maxRow + 1, cols: maxCol + 1 };
+      }
+
+      setCustomLayout({ keys, matrix });
+      setSelectedPreset('custom');
+      showToast('success', `Loaded Layout definition: ${keys.length} keys`);
     } catch (e: any) {
-      showToast('error', 'Failed to parse file: ' + e.message);
+      showToast('error', 'Failed to parse layout file: ' + e.message);
+    }
+  };
+
+  const parseVilFile = (text: string, name: string) => {
+    try {
+      const data = JSON.parse(text);
+
+      if (data.layouts) {
+        parseDefFile(text, name);
+        return;
+      }
+
+      if (!data.layout && !data.layers) {
+        showToast('error', 'Unrecognised format — expected a Vial .vil backup or layout definition file.');
+        return;
+      }
+
+      setRawBackupName(name);
+      setRawBackupData(data);
+
+      const autoPreset = detectPresetKey(data);
+      setSelectedPreset(autoPreset);
+
+      showToast('success', `Loaded backup "${name}"`);
+    } catch (e: any) {
+      showToast('error', 'Failed to parse backup file: ' + e.message);
     }
   };
 
   const handleFileInput = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => parseVilFile(e.target?.result as string, file.name);
+    reader.readAsText(file);
+  };
+
+  const handleDefFileInput = (file?: File) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => parseVilFile(e.target?.result as string, file.name);
@@ -225,6 +405,7 @@ export default function CheatsheetMaker() {
     <div className="maker-container">
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
       <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json,.vil" onChange={e => handleFileInput(e.target.files?.[0])} />
+      <input type="file" ref={defFileInputRef} style={{ display: 'none' }} accept=".json" onChange={e => handleDefFileInput(e.target.files?.[0])} />
 
       <div className="workspace-grid">
         <div className="canvas-wrapper">
@@ -237,8 +418,8 @@ export default function CheatsheetMaker() {
             >
               <div className="empty-state">
                 <span className="empty-icon">⌨️</span>
-                <h3>Drop your .vil file here</h3>
-                <p>Or click to browse — Vial backup files (.vil / .json) are supported</p>
+                <h3>Drop your .vil backup or layout JSON here</h3>
+                <p>Or click to browse — .vil backups and vial.json / VIA layout definitions are supported</p>
               </div>
             </div>
           ) : (
@@ -292,8 +473,9 @@ export default function CheatsheetMaker() {
         <aside className="sidebar-panels no-print" style={{ width: sidebarWidth }}>
           <div className="resize-handle" onMouseDown={startResizing} />
 
-          <div className="glass-card panel" style={{ paddingBottom: '0.75rem', background: 'rgba(255,255,255,0.02)' }}>
+          <div className="glass-card panel" style={{ paddingBottom: '0.75rem', background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}>📂 Upload .vil File</button>
+            <button className="btn btn-secondary" onClick={() => defFileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}>📐 Upload Layout File (.json)</button>
           </div>
 
           <div className="glass-card panel">
@@ -351,13 +533,11 @@ export default function CheatsheetMaker() {
           <div className="glass-card panel">
             <h3>Physical Layout</h3>
             <div className="form-group">
-              <select className="select-input" value={selectedPreset} onChange={(e) => {
-                setSelectedPreset(e.target.value);
-                setMappedLayers([]);
-              }}>
+              <select className="select-input" value={selectedPreset} onChange={(e) => setSelectedPreset(e.target.value)}>
                 {Object.entries(PRESETS).map(([k, v]: [string, any]) => (
                   <option key={k} value={k}>{v.name}</option>
                 ))}
+                <option value="custom">Custom Layout / Grid</option>
               </select>
             </div>
           </div>
