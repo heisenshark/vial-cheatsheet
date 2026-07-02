@@ -118,6 +118,7 @@ export default function CheatsheetMaker() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
 
   const startResizing = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = sidebarWidth;

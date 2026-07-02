@@ -606,7 +606,18 @@ export function PrintCanvas({
                 >{titleStr}</text>
                 
                 <g className="no-print" style={{ cursor: 'pointer' }}
-                  onMouseDown={e => { e.stopPropagation(); toggleLayerVisibility(layerIdx); }}
+                  onMouseDown={e => {
+                    if (e.button !== 0) {
+                      if (e.button === 1) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onCanvasDown(e);
+                      }
+                      return;
+                    }
+                    e.stopPropagation();
+                    toggleLayerVisibility(layerIdx);
+                  }}
                 >
                   <circle cx={titleX + titleW - 14} cy={CLABEL / 2} r={8} fill={theme.id === 'mono_print' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)'} />
                   <text x={titleX + titleW - 14} y={CLABEL / 2 + 3} textAnchor="middle" fontSize={10} fill={theme.id === 'mono_print' ? '#000000' : '#ffffff'} fontWeight="bold" style={{ userSelect: 'none' }}>×</text>
@@ -842,6 +853,14 @@ export function PrintCanvas({
                         fill="transparent" 
                         style={{ cursor: 'move' }} 
                         onMouseDown={e => {
+                          if (e.button !== 0) {
+                            if (e.button === 1) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onCanvasDown(e);
+                            }
+                            return;
+                          }
                           if (e.ctrlKey || e.metaKey) {
                             e.stopPropagation();
                             deleteArrowPoint(a.arrowId, idx);

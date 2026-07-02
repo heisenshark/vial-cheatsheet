@@ -218,6 +218,11 @@ export function useCanvasInteractions(
           const next = e.deltaY < 0 ? prev * zoomFactor : prev / zoomFactor;
           return Math.max(0.2, Math.min(5.0, next));
         });
+      } else if (e.shiftKey) {
+        setViewOff(prev => ({
+          x: prev.x + (e.deltaY !== 0 ? e.deltaY : e.deltaX),
+          y: prev.y
+        }));
       } else {
         setViewOff(prev => ({
           x: prev.x + e.deltaX,
@@ -281,6 +286,10 @@ export function useCanvasInteractions(
   };
 
   const onCanvasDown = (e: React.MouseEvent) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    if (e.button === 1) {
+      e.preventDefault();
+    }
     const svg = svgRef.current;
     if (!svg) return;
     dragCTM.current = svg.getScreenCTM()?.inverse() ?? null;
@@ -289,6 +298,14 @@ export function useCanvasInteractions(
   };
 
   const onLayerDown = (e: React.MouseEvent, layerIdx: number) => {
+    if (e.button !== 0) {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCanvasDown(e);
+      }
+      return;
+    }
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
@@ -299,6 +316,14 @@ export function useCanvasInteractions(
   };
 
   const onPaneDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCanvasDown(e);
+      }
+      return;
+    }
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
@@ -314,6 +339,14 @@ export function useCanvasInteractions(
     curX: number,
     curY: number
   ) => {
+    if (e.button !== 0) {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCanvasDown(e);
+      }
+      return;
+    }
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
@@ -331,6 +364,14 @@ export function useCanvasInteractions(
   };
 
   const onPrintBoxDown = (e: React.MouseEvent, curX: number, curY: number) => {
+    if (e.button !== 0) {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCanvasDown(e);
+      }
+      return;
+    }
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
@@ -340,6 +381,14 @@ export function useCanvasInteractions(
   };
 
   const onPrintBoxResizeDown = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br', curX: number, curY: number, curW: number, curH: number) => {
+    if (e.button !== 0) {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCanvasDown(e);
+      }
+      return;
+    }
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
