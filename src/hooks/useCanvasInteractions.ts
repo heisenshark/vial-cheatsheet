@@ -40,6 +40,7 @@ export function useCanvasInteractions(
   const [printBoxPos, setPrintBoxPos] = useState<Point>({ x: 0, y: 0 });
   const [printScale, setPrintScale] = useState(1);
   const [viewOff, setViewOff] = useState<Point>({ x: -40, y: -40 });
+  const [localZoom, setLocalZoom] = useState(printZoom);
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
 
@@ -47,7 +48,7 @@ export function useCanvasInteractions(
   const historyRef = useRef(history);
   historyRef.current = history;
   const stateRef = useRef<HistoryState & { infoPanePos: Point; printBoxPos: Point; printZoom: number; printScale: number }>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 0, y: 0 }, printBoxPos: { x: 0, y: 0 }, printZoom: printZoom, printScale: 1 });
-  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos, printBoxPos, printZoom, printScale };
+  stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos, printBoxPos, printZoom: localZoom, printScale };
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragCTM = useRef<DOMMatrix | null>(null);
@@ -150,6 +151,7 @@ export function useCanvasInteractions(
       baseVH / (printVH * finalPrintScale + 200)
     );
     const finalViewZoom = Math.max(0.1, Math.min(5.0, requiredViewZoom));
+    setLocalZoom(finalViewZoom);
     setPrintZoom(finalViewZoom);
 
     const VW = baseVW / finalViewZoom;
@@ -172,6 +174,28 @@ export function useCanvasInteractions(
       printBoxPos: newPrintBoxPos
     });
   }, [parsedKeys, mappedLayers, printOrientation, setPrintZoom, unitSize, showInfoPane, combos, tapDances, commitHistory]);
+
+  // Adjust camera/view offset when zoom changes from the UI slider (or undo/redo) to zoom relative to the center of the screen
+  useEffect(() => {
+    if (printZoom === localZoom) return;
+    const prevZoom = localZoom;
+    const nextZoom = printZoom;
+    setLocalZoom(nextZoom);
+
+    if (prevZoom === undefined || prevZoom === nextZoom) return;
+
+    const baseVW = 2500;
+    const baseVH = 2500;
+    const VW_prev = baseVW / prevZoom;
+    const VH_prev = baseVH / prevZoom;
+    const VW_next = baseVW / nextZoom;
+    const VH_next = baseVH / nextZoom;
+
+    setViewOff(prevOff => ({
+      x: prevOff.x + 0.5 * (VW_prev - VW_next),
+      y: prevOff.y + 0.5 * (VH_prev - VH_next)
+    }));
+  }, [printZoom, localZoom]);
 
   const gridLayoutVisibleLayers = useCallback((columns: number, gapX: number, gapY: number) => {
     if (!parsedKeys.length || !mappedLayers.length) return;
@@ -212,12 +236,34 @@ export function useCanvasInteractions(
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
+      const svg = svgRef.current;
+      if (!svg) return;
+
       if (e.ctrlKey) {
+        const rect = svg.getBoundingClientRect();
+        const rx = (e.clientX - rect.left) / rect.width;
+        const ry = (e.clientY - rect.top) / rect.height;
+
         const zoomFactor = 1.05;
-        setPrintZoom(prev => {
-          const next = e.deltaY < 0 ? prev * zoomFactor : prev / zoomFactor;
-          return Math.max(0.2, Math.min(5.0, next));
-        });
+        const prevZoom = stateRef.current.printZoom;
+        const nextZoom = e.deltaY < 0 ? prevZoom * zoomFactor : prevZoom / zoomFactor;
+        const clampedNext = Math.max(0.2, Math.min(5.0, nextZoom));
+
+        if (clampedNext !== prevZoom) {
+          const baseVW = 2500;
+          const baseVH = 2500;
+          const VW_prev = baseVW / prevZoom;
+          const VH_prev = baseVH / prevZoom;
+          const VW_next = baseVW / clampedNext;
+          const VH_next = baseVH / clampedNext;
+
+          setViewOff(prevOff => ({
+            x: prevOff.x + rx * (VW_prev - VW_next),
+            y: prevOff.y + ry * (VH_prev - VH_next)
+          }));
+          setLocalZoom(clampedNext);
+          setPrintZoom(clampedNext);
+        }
       } else if (e.shiftKey) {
         setViewOff(prev => ({
           x: prev.x + (e.deltaY !== 0 ? e.deltaY : e.deltaX),
@@ -540,6 +586,7 @@ export function useCanvasInteractions(
     printBoxPos,
     printScale,
     viewOff,
+    zoom: localZoom,
     svgDrag,
     snapGuides,
     svgRef,

@@ -105,6 +105,7 @@ export function PrintCanvas({
     printBoxPos,
     printScale,
     viewOff,
+    zoom,
     svgDrag,
     snapGuides,
     svgRef,
@@ -464,8 +465,8 @@ export function PrintCanvas({
   const kbW = (mx + CPAD * 2) * CPU, kbH = (my + CPAD * 2) * CPU;
   const baseVW = 2500;
   const baseVH = 2500;
-  const VW = baseVW / printZoom;
-  const VH = baseVH / printZoom;
+  const VW = baseVW / zoom;
+  const VH = baseVH / zoom;
 
   const printBoxW = printOrientation === 'landscape' ? 1800 * printScale : 1200 * printScale;
   const printBoxH = printOrientation === 'landscape' ? 1240 * printScale : 1735 * printScale;
