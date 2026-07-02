@@ -42,11 +42,13 @@ export function useCanvasInteractions(
   const [viewOff, setViewOff] = useState<Point>({ x: -40, y: -40 });
   const [svgDrag, setSvgDrag] = useState<DragState | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
-  
+
   const [history, setHistory] = useState({ stack: [] as HistoryState[], index: -1 });
+  const historyRef = useRef(history);
+  historyRef.current = history;
   const stateRef = useRef<HistoryState & { infoPanePos: Point; printBoxPos: Point; printZoom: number; printScale: number }>({ layerPositions: {}, arrowMidpoints: {}, hiddenLayers: {}, infoPanePos: { x: 0, y: 0 }, printBoxPos: { x: 0, y: 0 }, printZoom: printZoom, printScale: 1 });
   stateRef.current = { layerPositions, arrowMidpoints, hiddenLayers, infoPanePos, printBoxPos, printZoom, printScale };
-  
+
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragCTM = useRef<DOMMatrix | null>(null);
 
@@ -74,7 +76,7 @@ export function useCanvasInteractions(
     });
     setLayerPos(pos);
     setViewOff({ x: -40, y: -40 });
-    
+
     // Initialize history
     const initialPaneX = cw * 2 + 20;
     const initialPrintBoxPos = { x: 0, y: 0 };
@@ -92,14 +94,14 @@ export function useCanvasInteractions(
     const CLABEL = Math.max(28, 12 + 12);
     const kbW = (mx + CPAD * 2) * CPU;
     const kbH = (my + CPAD * 2) * CPU;
-    
+
     // Always read fresh state from stateRef to avoid stale closure
     const { layerPositions: lp, hiddenLayers: hl, infoPanePos: ipp } = stateRef.current;
 
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
     let hasVisible = false;
-    
+
     mappedLayers.forEach((_, i) => {
       if (hl[i]) return;
       const p = lp[i] || { x: 0, y: 0 };
@@ -122,47 +124,47 @@ export function useCanvasInteractions(
       maxY = Math.max(maxY, ipp.y + paneHeight);
       hasVisible = true;
     }
-    
+
     if (!hasVisible) return;
     const margin = 80;
     minX -= margin; minY -= margin;
     maxX += margin; maxY += margin;
-    
+
     const contentW = maxX - minX;
     const contentH = maxY - minY;
-    
+
     // Calculate zoom needed to fit content strictly inside the print boundary
     const printVW = printOrientation === 'landscape' ? 1800 : 1200;
     const printVH = printOrientation === 'landscape' ? 1240 : 1735;
-    
+
     // 1. Scale the print boundary to cover the content
     const requiredPrintScale = Math.max(contentW / printVW, contentH / printVH);
     const finalPrintScale = Math.max(0.1, Math.min(10.0, requiredPrintScale));
     setPrintScale(finalPrintScale);
-    
+
     // 2. Scale the camera so the print boundary is visible on screen
     const baseVW = 2500;
     const baseVH = 2500;
-    const requiredViewZoom = Math.max(
-      (printVW * finalPrintScale + 200) / baseVW,
-      (printVH * finalPrintScale + 200) / baseVH
+    const requiredViewZoom = Math.min(
+      baseVW / (printVW * finalPrintScale + 200),
+      baseVH / (printVH * finalPrintScale + 200)
     );
     const finalViewZoom = Math.max(0.1, Math.min(5.0, requiredViewZoom));
     setPrintZoom(finalViewZoom);
-    
-    const VW = baseVW * finalViewZoom;
-    const VH = baseVH * finalViewZoom;
+
+    const VW = baseVW / finalViewZoom;
+    const VH = baseVH / finalViewZoom;
     const centerX = minX + contentW / 2;
     const centerY = minY + contentH / 2;
-    
+
     const newPrintBoxPos = {
       x: centerX - (printVW * finalPrintScale) / 2,
       y: centerY - (printVH * finalPrintScale) / 2
     };
-    
+
     setPrintBoxPos(newPrintBoxPos);
     setViewOff({ x: centerX - VW / 2, y: centerY - VH / 2 });
-    
+
     commitHistory({
       ...stateRef.current,
       printZoom: finalViewZoom,
@@ -180,12 +182,12 @@ export function useCanvasInteractions(
     const CLABEL = Math.max(28, 12 + 12);
     const kbW = (mx + CPAD * 2) * CPU;
     const kbH = (my + CPAD * 2) * CPU + CLABEL;
-    
+
     const { layerPositions: lp, hiddenLayers: hl } = stateRef.current;
-    
+
     const visibleIdxs = mappedLayers.map((_, i) => i).filter(i => !hl[i]);
     if (visibleIdxs.length === 0) return;
-    
+
     const newPos = { ...lp };
     visibleIdxs.forEach((idx, i) => {
       const col = i % columns;
@@ -195,7 +197,7 @@ export function useCanvasInteractions(
         y: 20 + row * (kbH + gapY)
       };
     });
-    
+
     setLayerPos(newPos);
     commitHistory({ ...stateRef.current, layerPositions: newPos });
   }, [parsedKeys, mappedLayers, unitSize, commitHistory]);
@@ -213,7 +215,7 @@ export function useCanvasInteractions(
       if (e.ctrlKey) {
         const zoomFactor = 1.05;
         setPrintZoom(prev => {
-          const next = e.deltaY < 0 ? prev / zoomFactor : prev * zoomFactor;
+          const next = e.deltaY < 0 ? prev * zoomFactor : prev / zoomFactor;
           return Math.max(0.2, Math.min(5.0, next));
         });
       } else {
@@ -233,38 +235,33 @@ export function useCanvasInteractions(
       if (e.ctrlKey || e.metaKey) {
         if (e.key.toLowerCase() === 'z') {
           e.preventDefault();
+          const { stack, index } = historyRef.current;
           if (e.shiftKey) {
-            setHistory(prev => {
-              if (prev.index < prev.stack.length - 1) {
-                const nextIndex = prev.index + 1;
-                const state = prev.stack[nextIndex];
-                setLayerPos(state.layerPositions);
-                setArrowMidpoints(state.arrowMidpoints);
-                setHiddenLayers(state.hiddenLayers);
-                if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
-                if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
-                if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
-                if (state.printScale !== undefined) setPrintScale(state.printScale);
-                return { ...prev, index: nextIndex };
-              }
-              return prev;
-            });
+            if (index < stack.length - 1) {
+              const nextIndex = index + 1;
+              const state = stack[nextIndex];
+              setLayerPos(state.layerPositions);
+              setArrowMidpoints(state.arrowMidpoints);
+              setHiddenLayers(state.hiddenLayers);
+              if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
+              if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
+              if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
+              if (state.printScale !== undefined) setPrintScale(state.printScale);
+              setHistory(prev => ({ ...prev, index: nextIndex }));
+            }
           } else {
-            setHistory(prev => {
-              if (prev.index > 0) {
-                const nextIndex = prev.index - 1;
-                const state = prev.stack[nextIndex];
-                setLayerPos(state.layerPositions);
-                setArrowMidpoints(state.arrowMidpoints);
-                setHiddenLayers(state.hiddenLayers);
-                if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
-                if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
-                if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
-                if (state.printScale !== undefined) setPrintScale(state.printScale);
-                return { ...prev, index: nextIndex };
-              }
-              return prev;
-            });
+            if (index > 0) {
+              const nextIndex = index - 1;
+              const state = stack[nextIndex];
+              setLayerPos(state.layerPositions);
+              setArrowMidpoints(state.arrowMidpoints);
+              setHiddenLayers(state.hiddenLayers);
+              if (state.infoPanePos) setInfoPanePos(state.infoPanePos);
+              if (state.printBoxPos) setPrintBoxPos(state.printBoxPos);
+              if (state.printZoom !== undefined) setPrintZoom(state.printZoom);
+              if (state.printScale !== undefined) setPrintScale(state.printScale);
+              setHistory(prev => ({ ...prev, index: nextIndex }));
+            }
           }
         }
       }
@@ -342,7 +339,7 @@ export function useCanvasInteractions(
     setSvgDrag({ type: 'printBox', sx: x, sy: y, ox: curX, oy: curY });
   };
 
-  const onPrintBoxResizeDown = (e: React.MouseEvent, corner: 'tl'|'tr'|'bl'|'br', curX: number, curY: number, curW: number, curH: number) => {
+  const onPrintBoxResizeDown = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br', curX: number, curY: number, curW: number, curH: number) => {
     e.stopPropagation();
     const svg = svgRef.current;
     if (!svg) return;
@@ -407,9 +404,9 @@ export function useCanvasInteractions(
       let newH = initialH;
       let newX = svgDrag.ox;
       let newY = svgDrag.oy;
-      
+
       const printAspect = printOrientation === 'landscape' ? 1800 / 1240 : 1200 / 1735;
-      
+
       if (corner === 'br') {
         newW = initialW + dx;
         newH = newW / printAspect;
@@ -427,7 +424,7 @@ export function useCanvasInteractions(
         newX = svgDrag.ox + dx;
         newY = svgDrag.oy + initialH - newH;
       }
-      
+
       // Enforce a minimum width so it doesn't flip or become zero
       if (newW > 200) {
         setPrintBoxPos({ x: newX, y: newY });
@@ -439,10 +436,10 @@ export function useCanvasInteractions(
 
   const onSVGUp = () => {
     if (svgDrag && (
-      svgDrag.type === 'layer' || 
-      svgDrag.type === 'arrowControl' || 
-      svgDrag.type === 'pane' || 
-      svgDrag.type === 'printBox' || 
+      svgDrag.type === 'layer' ||
+      svgDrag.type === 'arrowControl' ||
+      svgDrag.type === 'pane' ||
+      svgDrag.type === 'printBox' ||
       svgDrag.type === 'printBoxResize'
     )) {
       commitHistory(stateRef.current);
