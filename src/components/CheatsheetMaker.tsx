@@ -3,6 +3,7 @@ import { PRESETS } from '../presets';
 import { parseKLE, mapLayersToLayout } from '../kleParser';
 import { THEMES } from '../themes';
 import type { ParsedKey, Theme, Combo, TapDance } from '../types';
+import { FolderOpen, Ruler, Save, Printer, Maximize, RefreshCw } from 'lucide-react';
 
 import { PrintCanvas } from './PrintCanvas';
 
@@ -53,7 +54,7 @@ export default function CheatsheetMaker() {
     canResetArrows: boolean;
     gridLayout: (cols: number, gapX: number, gapY: number) => void;
   } | null>(null);
-  
+
   // Grid layout state
   const [gridCols, setGridCols] = useState<string>('2');
   const [gridGapX, setGridGapX] = useState<string>('80');
@@ -105,14 +106,14 @@ export default function CheatsheetMaker() {
       gapYEl?.removeEventListener('wheel', handleGapY);
     };
   });
-  
+
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
     layers: false,
     theme: true,
     typography: true,
     dimensions: true
   });
-  const togglePanel = (p: string) => setCollapsedPanels(prev => ({...prev, [p]: !prev[p]}));
+  const togglePanel = (p: string) => setCollapsedPanels(prev => ({ ...prev, [p]: !prev[p] }));
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
 
@@ -120,18 +121,18 @@ export default function CheatsheetMaker() {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = sidebarWidth;
-    
+
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
       setSidebarWidth(Math.max(180, Math.min(600, startWidth + delta)));
     };
-    
+
     const onMouseUp = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       document.body.style.cursor = '';
     };
-    
+
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     document.body.style.cursor = 'ew-resize';
@@ -521,8 +522,8 @@ export default function CheatsheetMaker() {
           <div className="resize-handle" onMouseDown={startResizing} />
 
           <div className="glass-card panel" style={{ paddingBottom: '0.75rem', background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}>📂 Upload .vil File</button>
-            <button className="btn btn-secondary" onClick={() => defFileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}>📐 Upload Layout File (.json)</button>
+            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><FolderOpen size={16} /> Upload .vil File</button>
+            <button className="btn btn-secondary" onClick={() => defFileInputRef.current?.click()} style={{ width: '100%', fontSize: '0.8rem', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><Ruler size={16} /> Upload Layout File (.json)</button>
           </div>
 
           <div className="glass-card panel">
@@ -534,7 +535,7 @@ export default function CheatsheetMaker() {
                 <option value="portrait">Portrait</option>
               </select>
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
               <label className="checkbox-label">
                 <input type="checkbox" checked={!disableArrows} onChange={e => setDisableArrows(!e.target.checked)} />
@@ -564,14 +565,14 @@ export default function CheatsheetMaker() {
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-              <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={downloadPrintSVG}>💾 SVG</button>
-              <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => window.print()}>🖨️ PDF</button>
+              <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={downloadPrintSVG}><Save size={14} /> SVG</button>
+              <button className="btn btn-primary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={() => window.print()}><Printer size={14} /> PDF</button>
             </div>
             {canvasControls && (
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={canvasControls.fitToPage}>🔍 Fit to Page</button>
+                <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={canvasControls.fitToPage}><Maximize size={14} /> Fit to Page</button>
                 {canvasControls.canResetArrows && (
-                  <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={canvasControls.resetArrows}>🔄 Reset Arrows</button>
+                  <button className="btn btn-secondary btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={canvasControls.resetArrows}><RefreshCw size={14} /> Reset Arrows</button>
                 )}
               </div>
             )}
@@ -602,22 +603,22 @@ export default function CheatsheetMaker() {
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Columns</label>
-                        <input ref={colInputRef} type="number" value={gridCols} onChange={e => setGridCols(e.target.value)} min="1" 
+                        <input ref={colInputRef} type="number" value={gridCols} onChange={e => setGridCols(e.target.value)} min="1"
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap X</label>
-                        <input ref={gapXInputRef} type="number" value={gridGapX} onChange={e => setGridGapX(e.target.value)} 
+                        <input ref={gapXInputRef} type="number" value={gridGapX} onChange={e => setGridGapX(e.target.value)}
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap Y</label>
-                        <input ref={gapYInputRef} type="number" value={gridGapY} onChange={e => setGridGapY(e.target.value)} 
+                        <input ref={gapYInputRef} type="number" value={gridGapY} onChange={e => setGridGapY(e.target.value)}
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                     </div>
-                    <button 
-                      className="btn btn-secondary" 
+                    <button
+                      className="btn btn-secondary"
                       style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}
                       onClick={() => canvasControls.gridLayout(parseInt(gridCols) || 1, parseInt(gridGapX) || 0, parseInt(gridGapY) || 0)}
                     >
@@ -691,13 +692,13 @@ export default function CheatsheetMaker() {
             </div>
             {!collapsedPanels.theme && (
               <div className="theme-grid">
-              {Object.values(THEMES).map((t: any) => (
-                <button key={t.id} className={`theme-badge ${themeId === t.id ? 'active' : ''}`} onClick={() => setThemeId(t.id)} style={{ background: t.bg }}>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAlpha }}></span>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyModifier }}></span>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAccent }}></span>
-                </button>
-              ))}
+                {Object.values(THEMES).map((t: any) => (
+                  <button key={t.id} className={`theme-badge ${themeId === t.id ? 'active' : ''}`} onClick={() => setThemeId(t.id)} style={{ background: t.bg }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAlpha }}></span>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyModifier }}></span>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: t.keyAccent }}></span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -710,28 +711,28 @@ export default function CheatsheetMaker() {
             {!collapsedPanels.typography && (
               <>
                 <div className="form-group">
-              <label>Label Style</label>
-              <select className="select-input" value={labelMode} onChange={(e) => setLabelMode(e.target.value)}>
-                <option value="default">QMK Defaults</option>
-                <option value="abbrev">Shortened (Bksp, Ent)</option>
-                <option value="emoji">Symbols (⌫, ↵, ⇧)</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Font Family</label>
-              <select className="select-input" value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
-                <option value="Inter">Inter (Clean)</option>
-                <option value="Outfit">Outfit (Modern)</option>
-                <option value="JetBrains Mono">JetBrains Mono</option>
-                <option value="Fira Code">Fira Code</option>
-                <option value="system-ui">System Default</option>
-              </select>
-            </div>
-            <div className="sliders-grid">
-              <div className="slider-item">
-                <label>Font Size: {fontSize}px</label>
-                <input type="range" min="8" max="18" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} />
-              </div>
+                  <label>Label Style</label>
+                  <select className="select-input" value={labelMode} onChange={(e) => setLabelMode(e.target.value)}>
+                    <option value="default">QMK Defaults</option>
+                    <option value="abbrev">Shortened (Bksp, Ent)</option>
+                    <option value="emoji">Symbols (⌫, ↵, ⇧)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Font Family</label>
+                  <select className="select-input" value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
+                    <option value="Inter">Inter (Clean)</option>
+                    <option value="Outfit">Outfit (Modern)</option>
+                    <option value="JetBrains Mono">JetBrains Mono</option>
+                    <option value="Fira Code">Fira Code</option>
+                    <option value="system-ui">System Default</option>
+                  </select>
+                </div>
+                <div className="sliders-grid">
+                  <div className="slider-item">
+                    <label>Font Size: {fontSize}px</label>
+                    <input type="range" min="8" max="18" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} />
+                  </div>
                 </div>
               </>
             )}
@@ -744,17 +745,17 @@ export default function CheatsheetMaker() {
             </div>
             {!collapsedPanels.dimensions && (
               <div className="sliders-grid">
-              <div className="slider-item">
-                <label>Gap: {keyGap}px</label>
-                <input type="range" min="0" max="10" value={keyGap} onChange={e => setKeyGap(Number(e.target.value))} />
-              </div>
-              <div className="slider-item">
-                <label>Split Gap: {splitGap.toFixed(1)}</label>
-                <input type="range" min="-5" max="5" step="0.1" value={splitGap} onChange={e => setSplitGap(Number(e.target.value))} />
-              </div>
-              <div className="slider-item">
-                <label>Border Radius: {radius}px</label>
-                <input type="range" min="0" max="16" value={radius} onChange={e => setRadius(Number(e.target.value))} />
+                <div className="slider-item">
+                  <label>Gap: {keyGap}px</label>
+                  <input type="range" min="0" max="10" value={keyGap} onChange={e => setKeyGap(Number(e.target.value))} />
+                </div>
+                <div className="slider-item">
+                  <label>Split Gap: {splitGap.toFixed(1)}</label>
+                  <input type="range" min="-5" max="5" step="0.1" value={splitGap} onChange={e => setSplitGap(Number(e.target.value))} />
+                </div>
+                <div className="slider-item">
+                  <label>Border Radius: {radius}px</label>
+                  <input type="range" min="0" max="16" value={radius} onChange={e => setRadius(Number(e.target.value))} />
                 </div>
               </div>
             )}
