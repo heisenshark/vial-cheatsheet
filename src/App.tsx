@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './App.css';
 import CheatsheetMaker from './components/CheatsheetMaker';
 
 function App() {
+  const [dismissMobileWarning, setDismissMobileWarning] = useState(false);
+
   return (
     <div className="app-container">
+      {!dismissMobileWarning && (
+        <div className="mobile-warning-overlay">
+          <div className="mobile-warning-card">
+            <div className="mobile-warning-icon-wrapper">
+              <span>🖥️</span>
+            </div>
+            <h2>Desktop Recommended</h2>
+            <p>
+              Vial Cheatsheet Maker is optimized for larger screens (tablets & desktops) to support layout rendering, drag-and-drop actions, and drawing flow-line paths. Using it on narrow screens may be extremely difficult.
+            </p>
+            <button className="mobile-warning-btn" onClick={() => setDismissMobileWarning(true)}>
+              Continue Anyway
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Premium Top Navigation */}
       <nav className="navbar no-print">
         <div className="navbar-logo">
