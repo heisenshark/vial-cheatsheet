@@ -303,7 +303,7 @@ export function PrintCanvas({
         // Default mathematical midpoint of straight line
         const mx2 = (kCx + tCx) / 2;
         const my2 = (kCy + tCy) / 2;
-        const tempPts = (hasCustom && storedPts) ? storedPts : [{ x: mx2, y: my2 }];
+        const tempPts = (hasCustom && storedPts && storedPts.length > 0) ? storedPts : [{ x: mx2, y: my2 }];
 
         // Start snaps towards custom startAim if set, else first midpoint
         const startAim = data?.startAim ? data.startAim : (tempPts.length > 0 ? tempPts[0] : { x: tCx, y: tCy });
@@ -316,7 +316,7 @@ export function PrintCanvas({
         const ex = endPt.x, ey = endPt.y;
 
         // If user hasn't customized it, calculate fresh center based on snapped positions
-        const finalPts = (hasCustom && storedPts)
+        const finalPts = (hasCustom && storedPts && storedPts.length > 0)
           ? storedPts
           : [{ x: (sx + ex) / 2, y: (sy + ey) / 2 }];
 
@@ -422,7 +422,7 @@ export function PrintCanvas({
         // Default mathematical midpoint of straight line
         const mx2 = (measured ? (measured.x + tCx) / 2 : (paneCx + tCx) / 2);
         const my2 = (measured ? (measured.y + tCy) / 2 : (paneCy + tCy) / 2);
-        const tempPts = (hasCustom && storedPts) ? storedPts : [{ x: mx2, y: my2 }];
+        const tempPts = (hasCustom && storedPts && storedPts.length > 0) ? storedPts : [{ x: mx2, y: my2 }];
 
         let sx: number, sy: number;
         const startAim = data?.startAim ? data.startAim : (tempPts.length > 0 ? tempPts[0] : { x: tCx, y: tCy });
@@ -441,7 +441,7 @@ export function PrintCanvas({
         const ex = endPt.x, ey = endPt.y;
 
         // Rebuild center if not customized
-        const finalPts = (hasCustom && storedPts)
+        const finalPts = (hasCustom && storedPts && storedPts.length > 0)
           ? storedPts
           : [{ x: (sx + ex) / 2, y: (sy + ey) / 2 }];
 
