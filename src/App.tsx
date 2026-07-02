@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Monitor } from 'lucide-react';
 import './App.css';
 import CheatsheetMaker from './components/CheatsheetMaker';
 
@@ -11,7 +12,7 @@ function App() {
         <div className="mobile-warning-overlay">
           <div className="mobile-warning-card">
             <div className="mobile-warning-icon-wrapper">
-              <span>🖥️</span>
+              <Monitor size={36} strokeWidth={1.75} />
             </div>
             <h2>Desktop Recommended</h2>
             <p>
