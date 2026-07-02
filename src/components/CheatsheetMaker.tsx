@@ -55,9 +55,56 @@ export default function CheatsheetMaker() {
   } | null>(null);
   
   // Grid layout state
-  const [gridCols, setGridCols] = useState(2);
-  const [gridGapX, setGridGapX] = useState(80);
-  const [gridGapY, setGridGapY] = useState(60);
+  const [gridCols, setGridCols] = useState<string>('2');
+  const [gridGapX, setGridGapX] = useState<string>('80');
+  const [gridGapY, setGridGapY] = useState<string>('60');
+
+  const colInputRef = useRef<HTMLInputElement>(null);
+  const gapXInputRef = useRef<HTMLInputElement>(null);
+  const gapYInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const colsEl = colInputRef.current;
+    const gapXEl = gapXInputRef.current;
+    const gapYEl = gapYInputRef.current;
+
+    const handleCols = (e: WheelEvent) => {
+      e.preventDefault();
+      setGridCols(prev => {
+        const current = parseInt(prev) || 1;
+        const next = Math.max(1, current + (e.deltaY < 0 ? 1 : -1));
+        return String(next);
+      });
+    };
+
+    const handleGapX = (e: WheelEvent) => {
+      e.preventDefault();
+      setGridGapX(prev => {
+        const current = parseInt(prev) || 0;
+        const next = current + (e.deltaY < 0 ? 5 : -5);
+        return String(next);
+      });
+    };
+
+    const handleGapY = (e: WheelEvent) => {
+      e.preventDefault();
+      setGridGapY(prev => {
+        const current = parseInt(prev) || 0;
+        const next = current + (e.deltaY < 0 ? 5 : -5);
+        return String(next);
+      });
+    };
+
+    colsEl?.addEventListener('wheel', handleCols, { passive: false });
+    gapXEl?.addEventListener('wheel', handleGapX, { passive: false });
+    gapYEl?.addEventListener('wheel', handleGapY, { passive: false });
+
+    return () => {
+      colsEl?.removeEventListener('wheel', handleCols);
+      gapXEl?.removeEventListener('wheel', handleGapX);
+      gapYEl?.removeEventListener('wheel', handleGapY);
+    };
+  });
   
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
     layers: false,
@@ -555,24 +602,24 @@ export default function CheatsheetMaker() {
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Columns</label>
-                        <input type="number" value={gridCols} onChange={e => setGridCols(parseInt(e.target.value) || 1)} min="1" 
+                        <input ref={colInputRef} type="number" value={gridCols} onChange={e => setGridCols(e.target.value)} min="1" 
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap X</label>
-                        <input type="number" value={gridGapX} onChange={e => setGridGapX(parseInt(e.target.value) || 0)} 
+                        <input ref={gapXInputRef} type="number" value={gridGapX} onChange={e => setGridGapX(e.target.value)} 
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '0.7rem', color: 'var(--slate-400)' }}>Gap Y</label>
-                        <input type="number" value={gridGapY} onChange={e => setGridGapY(parseInt(e.target.value) || 0)} 
+                        <input ref={gapYInputRef} type="number" value={gridGapY} onChange={e => setGridGapY(e.target.value)} 
                           style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: '#fff', padding: '2px 4px', fontSize: '0.8rem' }} />
                       </div>
                     </div>
                     <button 
                       className="btn btn-secondary" 
                       style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}
-                      onClick={() => canvasControls.gridLayout(gridCols, gridGapX, gridGapY)}
+                      onClick={() => canvasControls.gridLayout(parseInt(gridCols) || 1, parseInt(gridGapX) || 0, parseInt(gridGapY) || 0)}
                     >
                       Apply Grid Layout
                     </button>
