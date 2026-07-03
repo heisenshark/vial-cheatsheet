@@ -1,6 +1,10 @@
 # Vial Cheatsheet Maker
 
 A beautiful and modern vector-based cheatsheet maker for custom QMK, VIA, and Vial mechanical keyboards. Generate printable cheatsheets, tweak layout dimensions, customize themes, and interactively manage layer-to-layer connection paths with ease.
+This project is basically fully done by AI with human assistance, credits go to Gemini and Claude mostly.
+## Showcase
+
+https://github.com/user-attachments/assets/75fe3ebd-062d-43d6-8bf2-1b52aba5f60c
 
 ## Features
 
