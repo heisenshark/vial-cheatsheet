@@ -9,7 +9,7 @@ function App() {
   return (
     <div className="app-container">
       {!dismissMobileWarning && (
-        <div className="mobile-warning-overlay">
+        <div className="mobile-warning-overlay no-print">
           <div className="mobile-warning-card">
             <div className="mobile-warning-icon-wrapper">
               <Monitor size={36} strokeWidth={1.75} />
